@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="QuickTranslate.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled">
+        <StackPanel MaxWidth="900" Padding="28,24,28,40" Spacing="22" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="8">
+                <TextBlock Text="设置" Style="{ThemeResource TitleTextBlockStyle}" />
+                <TextBlock Text="管理启动与后台运行，定义快捷键和处理选中文字的方式。保存后立即生效，无需重启。"
+                           TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <StackPanel Spacing="22">
+                <Border Padding="22" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="18">
+                        <TextBlock Text="启动与后台运行" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <StackPanel Spacing="6">
+                            <ToggleSwitch x:Name="StartWithWindowsToggle" Header="开机启动"
+                                          OnContent="开启" OffContent="关闭" />
+                            <TextBlock Text="登录 Windows 时在托盘后台运行，不自动弹出主窗口。Magpie 仍需单独启动。"
+                                       TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="StartupStatusTextBlock" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Spacing="6">
+                            <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="关闭后缩小到托盘"
+                                          OnContent="开启" OffContent="关闭" />
+                            <TextBlock Text="点击主窗口的 X 只隐藏窗口，划词快捷键继续可用。关闭此选项后，X 会直接退出程序。"
+                                       TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="点击托盘图标可重新打开主窗口；右键菜单可打开设置或彻底退出。开机启动绑定当前程序位置，移动程序后请重新保存此设置。"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="22" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="全局快捷键" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="在网页、Word 等应用中选中文字，按这个组合键即可打开划词助手。"
+                                       TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="16" RowSpacing="8" MaxWidth="400" HorizontalAlignment="Left">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <CheckBox x:Name="ControlCheckBox" Content="Ctrl" MinWidth="0"
+                                      Checked="HotkeyChoice_Changed" Unchecked="HotkeyChoice_Changed" />
+                            <CheckBox x:Name="AltCheckBox" Grid.Column="1" Content="Alt" MinWidth="0"
+                                      Checked="HotkeyChoice_Changed" Unchecked="HotkeyChoice_Changed" />
+                            <CheckBox x:Name="ShiftCheckBox" Grid.Row="1" Content="Shift" MinWidth="0"
+                                      Checked="HotkeyChoice_Changed" Unchecked="HotkeyChoice_Changed" />
+                            <CheckBox x:Name="WindowsCheckBox" Grid.Row="1" Grid.Column="1" Content="Win" MinWidth="0"
+                                      Checked="HotkeyChoice_Changed" Unchecked="HotkeyChoice_Changed" />
+                        </Grid>
+                        <ComboBox x:Name="HotkeyKeyComboBox" Header="主键" MinWidth="160" MaxDropDownHeight="300"
+                                  DisplayMemberPath="Label" SelectedValuePath="Value"
+                                  SelectionChanged="HotkeyKeyComboBox_SelectionChanged" />
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="HotkeyPreviewTextBlock" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock x:Name="ActiveHotkeyTextBlock" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="若快捷键被其他程序占用，保存时会提示，原快捷键不会被停用。"
+                                       FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <Button x:Name="ResetHotkeyButton" Content="恢复默认快捷键" Click="ResetHotkey_Click" />
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="22" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="提示词与任务" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="不只用于翻译：你可以让模型解释一段话、总结内容，或按自己的要求处理文字。主页面和划词弹窗使用同一份提示词。"
+                                       TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <ComboBox x:Name="PromptPresetComboBox" Header="任务预设" MinWidth="180"
+                                  SelectionChanged="PromptPresetComboBox_SelectionChanged">
+                            <ComboBoxItem Content="翻译" Tag="translation" />
+                            <ComboBoxItem Content="解释文字" Tag="explanation" />
+                            <ComboBoxItem Content="总结要点" Tag="summary" />
+                            <ComboBoxItem Content="自定义" Tag="custom" />
+                        </ComboBox>
+                        <TextBox x:Name="TaskPromptBox" Header="自定义提示词" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="170" MaxHeight="300" MaxLength="12000" Padding="12"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" TextChanged="TaskPromptBox_TextChanged"
+                                 PlaceholderText="例如：请用通俗的语言解释这段文字，说明关键概念，并给出一个例子。" />
+                        <TextBlock Text="可使用 {language} 引用所选的目标语言。选中文字会自动附加，不需要手动填写；修改提示词后，弹窗中的原文也会按新任务重新处理。"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="弹窗显示" FontWeight="SemiBold" />
+                    <TextBlock Text="划词助手始终置顶，默认位于选中文字所在屏幕的右上角，避开任务栏；仍可拖动和调整大小。"
+                               TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <Button x:Name="SaveSettingsButton" Content="保存并应用" Style="{StaticResource AccentButtonStyle}"
+                        Click="SaveSettings_Click" />
+            </StackPanel>
+
+            <InfoBar x:Name="SettingsStatusBar" IsOpen="False" IsClosable="True" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

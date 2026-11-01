@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="QuickTranslate.TranslationWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:QuickTranslate.Models"
+    Title="划词助手 - QuickTranslate">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid x:Name="RootGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+          PreviewKeyDown="RootGrid_PreviewKeyDown" SizeChanged="RootGrid_SizeChanged"
+          ActualThemeChanged="RootGrid_ActualThemeChanged">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Light">
+                        <SolidColorBrush x:Key="PopupAccentBrush" Color="#146B5D" />
+                        <SolidColorBrush x:Key="PopupAccentFillBrush" Color="#E5F1EC" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Default">
+                        <SolidColorBrush x:Key="PopupAccentBrush" Color="#93D8C7" />
+                        <SolidColorBrush x:Key="PopupAccentFillBrush" Color="#263D36" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="HighContrast">
+                        <SolidColorBrush x:Key="PopupAccentBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                        <SolidColorBrush x:Key="PopupAccentFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TitleBar x:Name="PopupTitleBar" Title="划词翻译" Height="44">
+            <TitleBar.IconSource>
+                <FontIconSource Glyph="&#xE8C1;" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
+        <Grid x:Name="MetadataRow" Grid.Row="1" Margin="22,6,22,14" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="LanguageCaptionTextBlock" Text="译为" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="TargetLanguageComboBox" MinWidth="112" MaxWidth="174" MinHeight="32"
+                          FontSize="12" FontWeight="SemiBold" Padding="10,5,30,5" MaxDropDownHeight="320"
+                          Background="{ThemeResource PopupAccentFillBrush}" Foreground="{ThemeResource PopupAccentBrush}"
+                          SelectionChanged="TargetLanguageComboBox_SelectionChanged" AutomationProperties.Name="目标语言"
+                          ToolTipService.ToolTip="与主页面同步并自动保存；切换后按新语言重新处理原文" />
+            </StackPanel>
+            <TextBlock x:Name="ModelTextBlock" Grid.Column="1" FontSize="12" TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" HorizontalAlignment="Right"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <!-- The document and conversation share one scroll owner; the composer stays outside it. -->
+            <ScrollViewer x:Name="BodyScroller" Padding="22,0,22,20" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                          IsHorizontalRailEnabled="False" IsVerticalScrollChainingEnabled="False"
+                          ViewChanged="BodyScroller_ViewChanged" AutomationProperties.Name="原文、结果和提问记录">
+                <StackPanel>
+                    <Grid MinHeight="32" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="原文" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="CharacterCountTextBlock" Grid.Column="1" FontSize="11" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <HyperlinkButton x:Name="ExpandOriginalButton" Grid.Column="2" Content="展开"
+                                         FontSize="12" Padding="6,4" Visibility="Collapsed"
+                                         Click="ExpandOriginalButton_Click" AutomationProperties.Name="展开或收起原文" />
+                    </Grid>
+                    <TextBlock x:Name="OriginalTextBlock" Text="正在读取选中文字…" FontSize="14" LineHeight="23"
+                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               IsTextTrimmedChanged="OriginalTextBlock_IsTextTrimmedChanged" />
+                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,18,0,6" />
+
+                    <CommandBar Background="Transparent" ClosedDisplayMode="Compact" DefaultLabelPosition="Collapsed"
+                                OverflowButtonVisibility="Collapsed" IsDynamicOverflowEnabled="False" Margin="0,0,-6,0"
+                                Padding="0" VerticalContentAlignment="Center">
+                        <CommandBar.Content>
+                            <TextBlock x:Name="ResultHeadingTextBlock" Text="结果" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </CommandBar.Content>
+                        <AppBarButton x:Name="RetryTranslationButton" Icon="Refresh" Label="重新翻译"
+                                      Visibility="Collapsed" Click="RetryTranslationButton_Click" ToolTipService.ToolTip="重试翻译" />
+                        <AppBarButton x:Name="CopyButton" Icon="Copy" Label="复制译文" IsEnabled="False"
+                                      Click="CopyButton_Click" ToolTipService.ToolTip="复制译文" />
+                    </CommandBar>
+
+                    <StackPanel x:Name="LoadingPanel" Spacing="10" Margin="0,4,0,16">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ProgressRing x:Name="TranslationProgressRing" IsActive="True" Width="20" Height="20"
+                                          Foreground="{ThemeResource PopupAccentBrush}" />
+                            <TextBlock x:Name="LoadingTextBlock" Text="正在读取选区…" FontSize="16" VerticalAlignment="Center"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                        <TextBlock x:Name="LoadingHintTextBlock" Text="无需手动复制，稍等片刻即可。" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <InfoBar x:Name="TranslationErrorBar" IsOpen="False" IsClosable="False" Severity="Error" Margin="0,0,0,8" />
+                    <TextBlock x:Name="TranslationTextBlock" FontSize="19" LineHeight="30" TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True" Visibility="Collapsed" />
+
+                    <TextBlock x:Name="ConversationHeading" Text="继续聊聊" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,26,0,16" Visibility="Collapsed" />
+                    <ItemsControl x:Name="ConversationItems" IsTabStop="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ConversationTurn">
+                                <StackPanel Margin="0,0,0,24">
+                                    <Border HorizontalAlignment="Right" Margin="32,0,0,0" Padding="13,10" CornerRadius="12,12,3,12"
+                                            Background="{ThemeResource PopupAccentFillBrush}">
+                                        <TextBlock Text="{x:Bind Question}" FontSize="14" LineHeight="23" TextWrapping="Wrap"
+                                                   IsTextSelectionEnabled="True" />
+                                    </Border>
+                                    <TextBlock Text="QuickTranslate" FontSize="11" Foreground="{ThemeResource PopupAccentBrush}" Margin="0,14,0,6" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind LoadingVisibility, Mode=OneWay}">
+                                        <ProgressRing Width="16" Height="16" IsActive="{x:Bind IsPending, Mode=OneWay}"
+                                                      Foreground="{ThemeResource PopupAccentBrush}" />
+                                        <TextBlock Text="正在思考…" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind Answer, Mode=OneWay}" FontSize="15" LineHeight="25"
+                                               TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                    <StackPanel Visibility="{x:Bind ErrorVisibility, Mode=OneWay}" Spacing="4">
+                                        <TextBlock Text="{x:Bind Error, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <HyperlinkButton Content="重新发送" FontSize="13" Padding="0,4" Click="RetryQuestionButton_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+            <Button x:Name="LatestButton" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,12"
+                    Visibility="Collapsed" Click="LatestButton_Click" ToolTipService.ToolTip="滚动到最新的提问和回答">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE74B;" FontSize="12" />
+                    <TextBlock Text="最新" FontSize="12" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <Border x:Name="ComposerBorder" Grid.Row="3" Padding="22,14,22,16" BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <StackPanel Spacing="10">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="继续提问" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ComposerStatusTextBlock" Grid.Column="1" Text="读取选区中" FontSize="12"
+                               HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.LiveSetting="Polite" />
+                </Grid>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="QuestionTextBox" PlaceholderText="继续提问，或补充你的要求…"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" MaxHeight="104" Padding="12,10"
+                             IsEnabled="False" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             TextChanged="QuestionTextBox_TextChanged" PreviewKeyDown="QuestionTextBox_PreviewKeyDown"
+                             TextCompositionStarted="QuestionTextBox_TextCompositionStarted"
+                             TextCompositionEnded="QuestionTextBox_TextCompositionEnded" AutomationProperties.Name="向划词助手提问" />
+                    <Button x:Name="AskButton" Grid.Column="1" Width="44" Height="44" VerticalAlignment="Bottom"
+                            Style="{StaticResource AccentButtonStyle}" IsEnabled="False" Click="AskButton_Click"
+                            AutomationProperties.Name="发送问题" ToolTipService.ToolTip="发送问题（Enter）">
+                        <FontIcon Glyph="&#xE724;" FontSize="17" />
+                    </Button>
+                </Grid>
+                <Grid x:Name="KeyboardHintRow">
+                    <TextBlock Text="Enter 发送 · Shift+Enter 换行" FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                    <TextBlock Text="Esc 关闭" FontSize="11" HorizontalAlignment="Right"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
