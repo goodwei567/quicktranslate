@@ -16,5 +16,24 @@ public sealed class AppSettings
 
     public bool StartWithWindows { get; set; }
 
+    // Opt-in elevation is only used when the user needs to capture text from
+    // an elevated window (for example, VS Code launched as administrator).
+    public bool UseAdministratorMode { get; set; }
+
+    public bool AutoElevateForProtectedApps { get; set; } = true;
+
     public bool MinimizeToTrayOnClose { get; set; } = true;
+
+    public bool EnableStreaming { get; set; } = true;
+
+    public bool EnableTranslationCache { get; set; } = true;
+
+    public bool EnableTranslationHistory { get; set; } = true;
+
+    public int HistoryLimit { get; set; } = 200;
+
+    // Empty means "let the provider decide". Values are stored per model because
+    // Magpie can route different models with different reasoning capabilities.
+    public Dictionary<string, string> ReasoningEffortByModel { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }

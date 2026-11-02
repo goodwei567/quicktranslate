@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,6 +23,17 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -match '^v(?<version>.+)$') {
+            $Matches.version
+          } else {
+            '1.1.0'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Restore
         run: dotnet restore .\QuickTranslate.csproj -r win-x64
 
@@ -36,11 +47,31 @@ jobs:
 
       - name: Publish
         shell: pwsh
-        run: .\scripts\publish-win-x64.ps1 -Version "1.0.0"
+        run: .\scripts\publish-win-x64.ps1 -Version "${{ steps.version.outputs.version }}"
 
       - name: Upload portable build
         uses: actions/upload-artifact@v4
         with:
           name: QuickTranslate-win-x64
-          path: artifacts/QuickTranslate-v1.0.0-win-x64.zip
+          path: artifacts/QuickTranslate-v${{ steps.version.outputs.version }}-win-x64.zip
           if-no-files-found: error
+
+      - name: Prepare release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $notesPath = ".github/release-notes/${{ github.ref_name }}.md"
+          $archivePath = "artifacts/QuickTranslate-v${{ steps.version.outputs.version }}-win-x64.zip"
+          $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+          $body = Get-Content -LiteralPath $notesPath -Raw
+          $body += "`n`nSHA-256: ``$hash``"
+          Set-Content -LiteralPath "artifacts/release-body.md" -Value $body -Encoding utf8
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: QuickTranslate ${{ github.ref_name }}
+          body_path: artifacts/release-body.md
+          files: artifacts/QuickTranslate-v${{ steps.version.outputs.version }}-win-x64.zip
+          fail_on_unmatched_files: true

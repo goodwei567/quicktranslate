@@ -8,9 +8,11 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
+                <ResourceDictionary Source="ms-appx:///Styles/MacTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
+            <!-- Softer, smaller radii across every control for a less blocky look. -->
+            <CornerRadius x:Key="ControlCornerRadius">7</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

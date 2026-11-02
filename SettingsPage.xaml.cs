@@ -21,8 +21,15 @@ public sealed partial class SettingsPage : Page
         ApplyHotkey(HotkeyGesture.FromSettings(settings));
         TaskPromptBox.Text = TaskPrompts.Normalize(settings.TaskPrompt);
         StartWithWindowsToggle.IsOn = settings.StartWithWindows;
+        AdministratorModeToggle.IsOn = settings.UseAdministratorMode;
+        AutoElevateToggle.IsOn = settings.AutoElevateForProtectedApps;
         MinimizeToTrayToggle.IsOn = settings.MinimizeToTrayOnClose;
+        StreamingToggle.IsOn = settings.EnableStreaming;
+        TranslationCacheToggle.IsOn = settings.EnableTranslationCache;
+        TranslationHistoryToggle.IsOn = settings.EnableTranslationHistory;
+        SelectHistoryLimit(settings.HistoryLimit);
         RefreshStartupState(syncToggle: true);
+        RefreshElevationState();
         _initialized = true;
         SyncPromptPreset();
         UpdateHotkeyPreview();
@@ -30,6 +37,8 @@ public sealed partial class SettingsPage : Page
         {
             UpdateActiveHotkey();
             RefreshStartupState();
+            RefreshElevationState();
+            RefreshAuxiliaryState();
         };
     }
 
@@ -74,19 +83,71 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
-            var registered = App.Current.Startup.IsEnabled;
+            var settings = App.Current.Settings.Load();
+            var elevatedMode = settings.UseAdministratorMode;
+            var status = App.Current.Startup.GetStatus(elevatedMode);
             if (syncToggle)
             {
-                StartWithWindowsToggle.IsOn = registered;
+                StartWithWindowsToggle.IsOn = settings.StartWithWindows;
             }
-            StartupStatusTextBlock.Text = registered
-                ? "已注册当前用户的启动项。Windows 也可以在任务管理器的“启动应用”中禁用它。"
-                : "尚未注册开机启动项，开启后点击“保存并应用”生效。";
+
+            StartupStatusTextBlock.Text = elevatedMode
+                ? status.State switch
+                {
+                    StartupRegistrationState.CurrentExecutable =>
+                        "已注册管理员模式启动任务，登录或解锁时会直接以后台管理员权限启动，不弹 UAC。"
+                        + (App.Current.Startup.IsElevatedStartupTaskRegistered
+                            ? " 该任务同时覆盖睡眠或休眠唤醒后的解锁。"
+                            : string.Empty),
+                    StartupRegistrationState.StalePath =>
+                        $"检测到旧的管理员模式启动任务，路径与当前程序不一致：{status.RegisteredExecutablePath ?? "无法识别"}。保存设置可自动修复。",
+                    _ => "管理员模式启动任务尚未注册。"
+                         + (App.Current.Startup.LastElevatedTaskError is { Length: > 0 } error
+                             ? $" {error}"
+                             : " 保存设置，或先以管理员权限重启后会自动创建。")
+                }
+                : status.State switch
+                {
+                    StartupRegistrationState.CurrentExecutable =>
+                        "已注册当前用户的启动项，并指向当前程序。Windows 也可以在任务管理器的“启动应用”中禁用它。"
+                        + UnlockTaskHint(),
+                    StartupRegistrationState.StalePath =>
+                        $"检测到旧的启动项，路径与当前程序不一致：{status.RegisteredExecutablePath ?? "无法识别"}。开启“开机启动”并保存可自动修复。",
+                    _ => "尚未注册开机启动项，开启后点击“保存并应用”生效。"
+                };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
             StartupStatusTextBlock.Text = $"无法读取系统启动项：{ex.Message}";
         }
+    }
+
+    private void RefreshElevationState()
+    {
+        var elevated = ElevationService.IsCurrentProcessElevated();
+        ElevationStatusTextBlock.Text = elevated
+            ? "当前权限：管理员。可以读取管理员窗口中的选区；普通窗口仍然可用。"
+            : "当前权限：普通用户。管理员窗口需要切换到管理员模式，普通窗口不受影响。";
+        if (!ElevationService.IsExecutableInProtectedLocation())
+        {
+            ElevationStatusTextBlock.Text +=
+                " 当前程序位于用户可写目录，出于安全考虑不会创建管理员模式开机启动任务；需要时会请求 UAC。";
+        }
+
+        RestartElevatedButton.IsEnabled = !elevated && !_isSaving;
+        RestartElevatedButton.Content = elevated ? "已以管理员权限运行" : "以管理员权限重启";
+    }
+
+    private string UnlockTaskHint()
+    {
+        if (App.Current.Startup.IsUnlockTaskRegistered)
+        {
+            return " 睡眠或休眠唤醒后，解锁时会自动补启动后台进程。";
+        }
+
+        return App.Current.Startup.LastUnlockTaskError is { Length: > 0 } error
+            ? $" 但未能注册“解锁后自动启动”：{error}"
+            : string.Empty;
     }
 
     private void ResetHotkey_Click(object sender, RoutedEventArgs e) => ApplyHotkey(HotkeyGesture.Default);
@@ -101,6 +162,7 @@ public sealed partial class SettingsPage : Page
         var prompt = (preset.Tag as string) switch
         {
             "translation" => TaskPrompts.Translation,
+            "technical" => TaskPrompts.Technical,
             "explanation" => TaskPrompts.Explanation,
             "summary" => TaskPrompts.Summary,
             _ => null
@@ -124,6 +186,7 @@ public sealed partial class SettingsPage : Page
         var id = TaskPromptBox.Text.Trim() switch
         {
             TaskPrompts.Translation => "translation",
+            TaskPrompts.Technical => "technical",
             TaskPrompts.Explanation => "explanation",
             TaskPrompts.Summary => "summary",
             _ => "custom"
@@ -156,41 +219,96 @@ public sealed partial class SettingsPage : Page
 
         var service = App.Current.GlobalHotkey;
         var startup = App.Current.Startup;
+        var previousSettings = App.Current.Settings.Load();
         var previousHotkey = service.CurrentHotkey;
-        StartupRegistration? previousStartup = null;
         var hotkeyApplied = false;
         var startupAttempted = false;
         var startWithWindows = StartWithWindowsToggle.IsOn;
+        var useAdministratorMode = AdministratorModeToggle.IsOn;
+        var autoElevate = AutoElevateToggle.IsOn;
+        var elevated = ElevationService.IsCurrentProcessElevated();
+        var restartRequired = useAdministratorMode && !elevated;
         var minimizeToTray = MinimizeToTrayToggle.IsOn;
+        var enableStreaming = StreamingToggle.IsOn;
+        var enableCache = TranslationCacheToggle.IsOn;
+        var enableHistory = TranslationHistoryToggle.IsOn;
+        var historyLimit = SelectedHistoryLimit;
         _isSaving = true;
         SetFormEnabled(false);
         try
         {
-            previousStartup = startup.CaptureRegistration();
             await service.ChangeAsync(hotkey);
             hotkeyApplied = true;
-            startupAttempted = true;
-            startup.SetEnabled(startWithWindows);
+            if (!restartRequired)
+            {
+                startupAttempted = true;
+                startup.SetEnabled(startWithWindows, useAdministratorMode);
+            }
+
             // Reload to preserve language/model preferences changed by another window.
             var settings = App.Current.Settings.Load();
             settings.HotkeyModifiers = hotkey.Modifiers;
             settings.HotkeyVirtualKey = hotkey.VirtualKey;
             settings.TaskPrompt = prompt;
             settings.StartWithWindows = startWithWindows;
+            settings.UseAdministratorMode = useAdministratorMode;
+            settings.AutoElevateForProtectedApps = autoElevate;
             settings.MinimizeToTrayOnClose = minimizeToTray;
+            settings.EnableStreaming = enableStreaming;
+            settings.EnableTranslationCache = enableCache;
+            settings.EnableTranslationHistory = enableHistory;
+            settings.HistoryLimit = historyLimit;
             App.Current.Settings.Save(settings);
 
+            if (restartRequired)
+            {
+                ShowStatus("正在请求管理员权限", "设置已保存。请在 UAC 窗口中确认，QuickTranslate 会自动重启到管理员模式。");
+                var restart = await App.Current.RequestElevatedRestartAsync();
+                if (restart.Started)
+                {
+                    return;
+                }
+
+                var reverted = App.Current.Settings.Load();
+                reverted.UseAdministratorMode = false;
+                reverted.AutoElevateForProtectedApps = autoElevate;
+                App.Current.Settings.Save(reverted);
+                AdministratorModeToggle.IsOn = false;
+
+                try
+                {
+                    startup.SetEnabled(startWithWindows, elevated: false);
+                }
+                catch (Exception startupError) when (startupError is IOException or UnauthorizedAccessException
+                                                       or InvalidOperationException)
+                {
+                    ShowStatus("已取消管理员模式",
+                        $"{restart.Error}\n其他设置已保存，但启动项未能应用：{startupError.Message}", isError: true);
+                    return;
+                }
+
+                ShowStatus("已取消管理员模式",
+                    $"{restart.Error}\n其他设置已保存，QuickTranslate 仍以普通权限运行。", isError: true);
+                return;
+            }
+
             var closeBehavior = minimizeToTray ? "关闭主窗口时隐藏到托盘" : "关闭主窗口时退出程序";
-            ShowStatus("设置已保存", $"快捷键：{hotkey.DisplayText}；{closeBehavior}。启动选项和提示词已应用。");
+            var mode = useAdministratorMode
+                ? "管理员模式已开启"
+                : elevated
+                    ? "管理员模式已关闭，但当前窗口仍是管理员权限；下次启动恢复普通权限"
+                    : "普通权限模式";
+            ShowStatus("设置已保存",
+                $"快捷键：{hotkey.DisplayText}；{closeBehavior}；{mode}。启动、提示词与输出设置已应用。");
         }
         catch (Exception ex)
         {
             var rollbackErrors = new List<string>();
-            if (startupAttempted && previousStartup is not null)
+            if (startupAttempted)
             {
                 try
                 {
-                    startup.RestoreRegistration(previousStartup);
+                    startup.SetEnabled(previousSettings.StartWithWindows, previousSettings.UseAdministratorMode);
                 }
                 catch (Exception rollbackError)
                 {
@@ -219,6 +337,70 @@ public sealed partial class SettingsPage : Page
             SetFormEnabled(true);
             UpdateActiveHotkey();
             RefreshStartupState(syncToggle: true);
+            RefreshElevationState();
+            RefreshAuxiliaryState();
+        }
+    }
+
+    private async void RestartElevatedButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isSaving || ElevationService.IsCurrentProcessElevated())
+        {
+            return;
+        }
+
+        _isSaving = true;
+        SetFormEnabled(false);
+        RefreshElevationState();
+        var changed = false;
+        try
+        {
+            var settings = App.Current.Settings.Load();
+            settings.UseAdministratorMode = true;
+            settings.AutoElevateForProtectedApps = AutoElevateToggle.IsOn;
+            App.Current.Settings.Save(settings);
+            changed = true;
+            AdministratorModeToggle.IsOn = true;
+            ShowStatus("正在请求管理员权限", "请在 UAC 窗口中确认，QuickTranslate 会自动重启。");
+
+            var restart = await App.Current.RequestElevatedRestartAsync();
+            if (restart.Started)
+            {
+                return;
+            }
+
+            var reverted = App.Current.Settings.Load();
+            reverted.UseAdministratorMode = false;
+            App.Current.Settings.Save(reverted);
+            AdministratorModeToggle.IsOn = false;
+            ShowStatus("未切换到管理员模式", restart.Error ?? "管理员权限请求失败。", isError: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (changed)
+            {
+                try
+                {
+                    var reverted = App.Current.Settings.Load();
+                    reverted.UseAdministratorMode = false;
+                    App.Current.Settings.Save(reverted);
+                    AdministratorModeToggle.IsOn = false;
+                }
+                catch (Exception rollbackError) when (rollbackError is IOException or UnauthorizedAccessException)
+                {
+                    ShowStatus("无法恢复设置", rollbackError.Message, isError: true);
+                }
+            }
+
+            ShowStatus("未切换到管理员模式", ex.Message, isError: true);
+        }
+        finally
+        {
+            _isSaving = false;
+            SetFormEnabled(true);
+            RefreshElevationState();
+            RefreshStartupState(syncToggle: true);
+            RefreshAuxiliaryState();
         }
     }
 
@@ -228,7 +410,9 @@ public sealed partial class SettingsPage : Page
         [
             ControlCheckBox, AltCheckBox, ShiftCheckBox, WindowsCheckBox, HotkeyKeyComboBox,
             ResetHotkeyButton, PromptPresetComboBox, TaskPromptBox, StartWithWindowsToggle,
-            MinimizeToTrayToggle, SaveSettingsButton
+            AdministratorModeToggle, AutoElevateToggle, RestartElevatedButton,
+            MinimizeToTrayToggle, StreamingToggle, TranslationCacheToggle, TranslationHistoryToggle,
+            HistoryLimitComboBox, ClearCacheButton, ClearHistoryButton, SaveSettingsButton
         ];
         foreach (var control in controls)
         {
@@ -242,5 +426,70 @@ public sealed partial class SettingsPage : Page
         SettingsStatusBar.Message = message;
         SettingsStatusBar.Severity = isError ? InfoBarSeverity.Error : InfoBarSeverity.Success;
         SettingsStatusBar.IsOpen = true;
+    }
+
+    private int SelectedHistoryLimit =>
+        HistoryLimitComboBox.SelectedItem is ComboBoxItem item &&
+        int.TryParse(item.Tag as string, out var value)
+            ? value
+            : 200;
+
+    private void SelectHistoryLimit(int value)
+    {
+        var normalized = Math.Clamp(value, 20, 1000);
+        HistoryLimitComboBox.SelectedItem = HistoryLimitComboBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag as string == normalized.ToString())
+            ?? HistoryLimitComboBox.Items.OfType<ComboBoxItem>()
+                .First(item => item.Tag as string == "200");
+    }
+
+    private void RefreshAuxiliaryState()
+    {
+        CacheStatusTextBlock.Text =
+            $"当前有 {App.Current.Cache.Count} 条可用缓存；相同原文、模型、语言和提示词会直接复用。";
+        HistoryStatusTextBlock.Text = $"当前保存 {App.Current.History.Count} 条历史记录。";
+    }
+
+    private void ClearCache_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            App.Current.Cache.Clear();
+            RefreshAuxiliaryState();
+            ShowStatus("缓存已清空", "下一次处理文字时会重新请求 Magpie。");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowStatus("无法清空缓存", ex.Message, isError: true);
+        }
+    }
+
+    private async void ClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "清空全部历史？",
+            Content = "收藏记录也会一并删除，此操作无法撤销。",
+            PrimaryButtonText = "清空",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            App.Current.History.Clear();
+            RefreshAuxiliaryState();
+            ShowStatus("历史记录已清空", "后续处理仍会按当前开关继续记录。");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowStatus("无法清空历史", ex.Message, isError: true);
+        }
     }
 }

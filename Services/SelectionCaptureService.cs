@@ -28,6 +28,15 @@ public sealed class SelectionCaptureService
         try
         {
             EnsureSourceWindow(sourceWindow);
+            if (!ElevationService.CanSendInputTo(sourceWindow))
+            {
+                var processName = ElevationService.GetWindowProcessName(sourceWindow) ?? "目标程序";
+                throw new ProtectedWindowCaptureException(
+                    $"“{processName}”以管理员权限运行，而 QuickTranslate 当前是普通权限。" +
+                    "Windows 会阻止普通程序向管理员窗口发送 Ctrl+C。" +
+                    "请切换到管理员模式，或让该程序以普通权限重新打开。");
+            }
+
             await WaitForShortcutReleaseAsync(sourceWindow, triggerKey, cancellationToken);
             var snapshot = await TrySnapshotClipboardAsync(cancellationToken);
             await WaitForShortcutReleaseAsync(sourceWindow, triggerKey, cancellationToken);

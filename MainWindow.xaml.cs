@@ -2,8 +2,12 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using QuickTranslate.Models;
 using QuickTranslate.Services;
+using QuickTranslate.Controls;
+using System.Runtime.InteropServices;
+using Windows.Graphics;
 using WinRT.Interop;
 
 namespace QuickTranslate;
@@ -21,6 +25,7 @@ public sealed partial class MainWindow : Window
     private bool _selectionCaptureInProgress;
     private bool _isClosed;
     private bool _exitRequested;
+    private bool _isHiddenToTray;
 
     public bool IsTrayAvailable => _trayIcon.IsAvailable;
 
@@ -35,12 +40,14 @@ public sealed partial class MainWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        AppWindow.SetIcon("Assets/AppIcon.ico");
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         _globalHotkey.HotkeyPressed += OnHotkeyPressed;
         _globalHotkey.Start(HotkeyGesture.FromSettings(App.Current.Settings.Load()));
         RootFrame.Navigate(typeof(MainPage));
         _mainPage = (MainPage)RootFrame.Content;
-        ShellNavigation.SelectedItem = WorkbenchNavigationItem;
+        SelectSegment(WorkbenchNavigationItem);
+        NavigateTo("workbench");
+        ApplyWindowMetrics();
         _trayIcon = new TrayIconService(WindowNative.GetWindowHandle(this), _dispatcherQueue);
         _trayIcon.OpenRequested += OnTrayOpenRequested;
         _trayIcon.SettingsRequested += OnTraySettingsRequested;
@@ -59,9 +66,11 @@ public sealed partial class MainWindow : Window
 
         if (openSettings)
         {
-            ShellNavigation.SelectedItem = SettingsNavigationItem;
+            SelectSegment(SettingsNavigationItem);
+            NavigateTo("settings");
         }
         AppWindow.Show();
+        _isHiddenToTray = false;
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
         {
             presenter.Restore();
@@ -99,22 +108,144 @@ public sealed partial class MainWindow : Window
 
         args.Cancel = true;
         sender.Hide();
+        _isHiddenToTray = true;
+        TrimWorkingSetWhenIdle();
         _trayIcon.ShowBackgroundNotice();
     }
 
-    private void ShellNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    // WinUI keeps composed surfaces and managed caches after a window is hidden; hand the pages
+    // back to Windows once the app has been sitting in the tray for a while.
+    private void TrimWorkingSetWhenIdle()
     {
-        if (RootFrame is null || args.SelectedItem is not NavigationViewItem item)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(40), _lifetimeCancellation.Token);
+                if (_isClosed || !_isHiddenToTray)
+                {
+                    return;
+                }
+
+                GC.Collect(2, GCCollectionMode.Optimized, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Optimized, blocking: true, compacting: true);
+                SetProcessWorkingSetSize(GetCurrentProcess(), new IntPtr(-1), new IntPtr(-1));
+                EmptyWorkingSet(GetCurrentProcess());
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+            {
+            }
+        });
+    }
+
+    private void NavSegment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not SegmentButton { Tag: string tag } segment)
         {
             return;
         }
 
-        var destination = item.Tag as string == "settings" ? typeof(SettingsPage) : typeof(MainPage);
+        SelectSegment(segment);
+        NavigateTo(tag);
+    }
+
+    private void SelectSegment(SegmentButton selected)
+    {
+        foreach (var segment in new[] { WorkbenchNavigationItem, HistoryNavigationItem, SettingsNavigationItem })
+        {
+            segment.IsSelected = ReferenceEquals(segment, selected);
+        }
+    }
+
+    private void NavigateTo(string tag)
+    {
+        if (RootFrame is null)
+        {
+            return;
+        }
+
+        var destination = tag switch
+        {
+            "settings" => typeof(SettingsPage),
+            "history" => typeof(HistoryPage),
+            _ => typeof(MainPage)
+        };
         if (RootFrame.CurrentSourcePageType != destination)
         {
             RootFrame.Navigate(destination);
         }
     }
+
+    private void ApplyWindowMetrics()
+    {
+        try
+        {
+            var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            var scale = GetWindowScale();
+            var width = Math.Min((int)Math.Round(880 * scale), workArea.Width - 64);
+            var height = Math.Min((int)Math.Round(600 * scale), workArea.Height - 64);
+            AppWindow.MoveAndResize(new RectInt32(
+                workArea.X + ((workArea.Width - width) / 2),
+                workArea.Y + ((workArea.Height - height) / 2),
+                width,
+                height));
+            AppWindow.Changed += KeepMinimumSize;
+            RoundCorners();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+        }
+    }
+
+    private void KeepMinimumSize(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidSizeChange || _isClosed)
+        {
+            return;
+        }
+
+        var scale = GetWindowScale();
+        var minWidth = (int)Math.Round(720 * scale);
+        var minHeight = (int)Math.Round(500 * scale);
+        var size = sender.Size;
+        var width = Math.Max(size.Width, minWidth);
+        var height = Math.Max(size.Height, minHeight);
+        if (width != size.Width || height != size.Height)
+        {
+            sender.Resize(new SizeInt32(width, height));
+        }
+    }
+
+    private void RoundCorners()
+    {
+        const int DwmwaWindowCornerPreference = 33;
+        const int DwmwcpRound = 2;
+        var preference = DwmwcpRound;
+        _ = DwmSetWindowAttribute(WindowNative.GetWindowHandle(this), DwmwaWindowCornerPreference,
+            ref preference, Marshal.SizeOf<int>());
+    }
+
+    private double GetWindowScale() =>
+        Math.Max(96, GetDpiForWindow(WindowNative.GetWindowHandle(this))) / 96d;
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr window);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr minimumSize, IntPtr maximumSize);
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    private static extern bool EmptyWorkingSet(IntPtr process);
 
     private async Task TranslateSelectedTextAsync(IntPtr sourceWindow, uint triggerKey)
     {
@@ -126,33 +257,17 @@ public sealed partial class MainWindow : Window
         _selectionCaptureInProgress = true;
         var cancellationToken = _lifetimeCancellation.Token;
         var page = _mainPage;
-        var previousWindow = _translationWindow;
-        var previousRequest = previousWindow?.PendingRequest;
-        var selectionIsInPreviousWindow = previousWindow is not null &&
-            WindowNative.GetWindowHandle(previousWindow) == sourceWindow;
         TranslationWindow? popup = null;
         string? selectedText = null;
+        CancellationToken sessionToken = default;
         try
         {
-            if (!selectionIsInPreviousWindow)
-            {
-                previousWindow?.Close();
-            }
-
-            popup = new TranslationWindow(App.Current.Settings.Load(), _translator, previousRequest, sourceWindow);
-            _translationWindow = popup;
-            popup.TranslationStateChanged += OnTranslationStateChanged;
-            popup.Closed += (_, _) =>
-            {
-                popup.TranslationStateChanged -= OnTranslationStateChanged;
-                if (ReferenceEquals(_translationWindow, popup))
-                {
-                    _translationWindow = null;
-                }
-            };
+            popup = EnsureTranslationWindow();
+            popup.PrepareForSelection(sourceWindow, App.Current.Settings.Load());
+            sessionToken = popup.SessionToken;
             popup.ShowWithoutActivation();
 
-            using var captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, popup.LifetimeToken);
+            using var captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionToken);
             // Yield so the loading surface can render while the shortcut keys are being released.
             await Task.Delay(1, captureCancellation.Token);
             selectedText = await _selectionCapture.CaptureSelectedTextAsync(sourceWindow, captureCancellation.Token, triggerKey);
@@ -177,6 +292,38 @@ public sealed partial class MainWindow : Window
             page.SetStatus("读取选区已取消。");
             return;
         }
+        catch (ProtectedWindowCaptureException ex) when (!_isClosed)
+        {
+            page.SetStatus(ex.Message, isError: true);
+            if (popup is { IsClosed: false })
+            {
+                popup.ShowCaptureError(ex.Message, showElevationAction: true);
+                popup.Activate();
+            }
+
+            if (App.Current.Settings.Load().AutoElevateForProtectedApps)
+            {
+                if (popup is { IsClosed: false })
+                {
+                    popup.ShowCaptureError($"{ex.Message}\n\n正在请求管理员权限…", showElevationAction: true);
+                }
+
+                var restart = await App.Current.RequestElevatedRestartAsync();
+                if (restart.Started)
+                {
+                    return;
+                }
+
+                var message = $"{ex.Message}\n{restart.Error}";
+                page.SetStatus(message, isError: true);
+                if (popup is { IsClosed: false })
+                {
+                    popup.ShowCaptureError(message, showElevationAction: true);
+                }
+            }
+
+            return;
+        }
         catch (Exception ex) when (!_isClosed)
         {
             page.SetStatus(ex.Message, isError: true);
@@ -193,20 +340,43 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            // Keep an existing popup alive until copying finishes if it is itself the source window.
-            if (selectionIsInPreviousWindow && previousWindow is { IsClosed: false })
-            {
-                previousWindow.Close();
-            }
             _selectionCaptureInProgress = false;
         }
 
-        if (popup is null || popup.IsClosed || _isClosed)
+        if (popup is null || popup.IsClosed || _isClosed || sessionToken.IsCancellationRequested)
         {
             return;
         }
 
-        await popup.TranslateAsync(selectedText!, cancellationToken);
+        await popup.TranslateAsync(selectedText!, sessionToken);
+    }
+
+    public void ExitForRestart()
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        _exitRequested = true;
+        Close();
+    }
+
+    public void ShowElevatedRestartNotice() =>
+        _trayIcon.ShowNotice("已切换到管理员模式",
+            "现在可以读取管理员窗口中的选区。请重新选中文字并按快捷键。");
+
+    private TranslationWindow EnsureTranslationWindow()
+    {
+        if (_translationWindow is { IsClosed: false } existing)
+        {
+            return existing;
+        }
+
+        var popup = new TranslationWindow(App.Current.Settings.Load(), _translator);
+        popup.TranslationStateChanged += OnTranslationStateChanged;
+        _translationWindow = popup;
+        return popup;
     }
 
     private void OnTranslationStateChanged(object? sender, EventArgs e)
@@ -255,6 +425,6 @@ public sealed partial class MainWindow : Window
         _lifetimeCancellation.Dispose();
         _globalHotkey.HotkeyPressed -= OnHotkeyPressed;
         _globalHotkey.Dispose();
-        _translationWindow?.Close();
+        _translationWindow?.CloseForShutdown();
     }
 }

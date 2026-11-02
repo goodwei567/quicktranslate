@@ -12,7 +12,8 @@ public sealed class ConversationTurn : INotifyPropertyChanged
     public string Answer { get; private set; } = string.Empty;
     public string Error { get; private set; } = string.Empty;
     public bool IsPending { get; private set; } = true;
-    public Visibility LoadingVisibility => IsPending ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility LoadingVisibility =>
+        IsPending && string.IsNullOrEmpty(Answer) ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ErrorVisibility => string.IsNullOrEmpty(Error) ? Visibility.Collapsed : Visibility.Visible;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -30,6 +31,13 @@ public sealed class ConversationTurn : INotifyPropertyChanged
         IsPending = false;
         Error = string.Empty;
         NotifyStateChanged();
+    }
+
+    public void UpdateAnswer(string answer)
+    {
+        Answer = answer;
+        OnPropertyChanged(nameof(Answer));
+        OnPropertyChanged(nameof(LoadingVisibility));
     }
 
     public void Fail(string error)

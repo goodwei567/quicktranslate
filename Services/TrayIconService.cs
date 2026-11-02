@@ -94,10 +94,21 @@ public sealed class TrayIconService : IDisposable
             return;
         }
         _noticeShown = true;
+        ShowNotice("QuickTranslate 正在后台运行",
+            "全局快捷键仍可用。点击托盘图标可打开主窗口；右键菜单可打开设置或退出。");
+    }
+
+    public void ShowNotice(string title, string message)
+    {
+        if (!IsAvailable)
+        {
+            return;
+        }
+
         var data = CreateIconData();
         data.Flags = NifInfo;
-        data.InfoTitle = "QuickTranslate 正在后台运行";
-        data.Info = "全局快捷键仍可用。点击托盘图标可打开主窗口；右键菜单可打开设置或退出。";
+        data.InfoTitle = title;
+        data.Info = message;
         data.InfoFlags = 1;
         ShellNotifyIcon(NimModify, ref data);
     }

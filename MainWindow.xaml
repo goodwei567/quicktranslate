@@ -5,33 +5,57 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:QuickTranslate"
+    xmlns:controls="using:QuickTranslate.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="QuickTranslate"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
-        <MicaBackdrop />
+        <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="QuickTranslate">
+        <TitleBar x:Name="AppTitleBar" Title="QuickTranslate" Height="40">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
 
-        <NavigationView x:Name="ShellNavigation" Grid.Row="1" PaneDisplayMode="Top"
-                        IsSettingsVisible="False" IsPaneToggleButtonVisible="False" IsBackButtonVisible="Collapsed"
-                        SelectionChanged="ShellNavigation_SelectionChanged">
-            <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="WorkbenchNavigationItem" Content="工作台" Icon="Edit" Tag="workbench" />
-                <NavigationViewItem x:Name="SettingsNavigationItem" Content="设置" Icon="Setting" Tag="settings" />
-            </NavigationView.MenuItems>
-            <Frame x:Name="RootFrame" CacheSize="2" />
-        </NavigationView>
+        <Border Grid.Row="1" Margin="14,0,14,4" Padding="3" CornerRadius="9"
+                HorizontalAlignment="Left" Background="{ThemeResource QtSegmentTrackBrush}">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <controls:SegmentButton x:Name="WorkbenchNavigationItem" Tag="workbench" IsSelected="True"
+                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                        ToolTipService.ToolTip="工作台">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE70F;" FontSize="12" />
+                        <TextBlock Text="工作台" FontSize="12" />
+                    </StackPanel>
+                </controls:SegmentButton>
+                <controls:SegmentButton x:Name="HistoryNavigationItem" Tag="history"
+                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                        ToolTipService.ToolTip="历史">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE81C;" FontSize="12" />
+                        <TextBlock Text="历史" FontSize="12" />
+                    </StackPanel>
+                </controls:SegmentButton>
+                <controls:SegmentButton x:Name="SettingsNavigationItem" Tag="settings"
+                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                        ToolTipService.ToolTip="设置">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE713;" FontSize="12" />
+                        <TextBlock Text="设置" FontSize="12" />
+                    </StackPanel>
+                </controls:SegmentButton>
+            </StackPanel>
+        </Border>
+
+        <Frame x:Name="RootFrame" Grid.Row="2" CacheSize="3" Background="Transparent" />
     </Grid>
 </Window>

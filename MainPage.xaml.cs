@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -13,6 +14,7 @@ public sealed partial class MainPage : Page
     private CancellationTokenSource? _manualTranslationCancellation;
     private bool _isLoaded;
     private bool _isRefreshingModels;
+    private bool _syncingReasoningEffort;
 
     public MainPage()
     {
@@ -22,7 +24,9 @@ public sealed partial class MainPage : Page
         _targetLanguage = App.Current.TargetLanguage;
         BaseUrlBox.Text = _settings.MagpieBaseUrl;
         TargetLanguageBox.ItemsSource = _targetLanguage.Languages;
+        ReasoningEffortComboBox.SelectedIndex = 0;
         SyncTargetLanguage();
+        SyncReasoningEffort();
         UpdateTaskPresentation();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -33,6 +37,8 @@ public sealed partial class MainPage : Page
         _isLoaded = true;
         _targetLanguage.Changed += TargetLanguage_Changed;
         App.Current.Settings.Saved += Settings_Saved;
+        CancelManualTranslationButton.Visibility = Visibility.Collapsed;
+        TranslateButton.IsEnabled = true;
         SyncTargetLanguage();
         SyncWorkflowSettings();
         if (ModelComboBox.ItemsSource is null)
@@ -74,6 +80,8 @@ public sealed partial class MainPage : Page
         _settings.TaskPrompt = saved.TaskPrompt;
         _settings.HotkeyModifiers = saved.HotkeyModifiers;
         _settings.HotkeyVirtualKey = saved.HotkeyVirtualKey;
+        _settings.ReasoningEffortByModel = saved.ReasoningEffortByModel;
+        SyncReasoningEffort();
         UpdateTaskPresentation();
     }
 
@@ -84,13 +92,64 @@ public sealed partial class MainPage : Page
         ManualTaskTitleTextBlock.Text = $"手动{action}";
         TaskHintTextBlock.Text = "使用设置页面中的提示词；结果留在当前页面，不会额外弹窗。";
         TranslateButton.Content = action;
-        ResultTextBox.Header = TaskPrompts.GetResultLabel(_settings.TaskPrompt);
+        ResultHeaderTextBlock.Text = TaskPrompts.GetResultLabel(_settings.TaskPrompt);
     }
 
     private void SyncTargetLanguage()
     {
         _settings.TargetLanguage = _targetLanguage.CurrentLanguage;
         TargetLanguageBox.SelectedItem = _targetLanguage.CurrentLanguage;
+    }
+
+    private void SyncReasoningEffort()
+    {
+        _syncingReasoningEffort = true;
+        var modelId = ModelComboBox.SelectedValue as string ?? _settings.ModelId;
+        var effort = _settings.ReasoningEffortByModel.TryGetValue(modelId, out var saved)
+            ? saved
+            : string.Empty;
+        ReasoningEffortComboBox.SelectedItem = ReasoningEffortComboBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string ?? string.Empty, effort, StringComparison.OrdinalIgnoreCase))
+            ?? ReasoningEffortComboBox.Items[0];
+        _syncingReasoningEffort = false;
+    }
+
+    private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => SyncReasoningEffort();
+
+    private void ReasoningEffortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingReasoningEffort || ReasoningEffortComboBox.SelectedItem is not ComboBoxItem selected)
+        {
+            return;
+        }
+
+        var modelId = ModelComboBox.SelectedValue as string;
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return;
+        }
+
+        var effort = selected.Tag as string ?? string.Empty;
+        try
+        {
+            var settings = App.Current.Settings.Load();
+            if (effort.Length == 0)
+            {
+                settings.ReasoningEffortByModel.Remove(modelId);
+            }
+            else
+            {
+                settings.ReasoningEffortByModel[modelId] = effort;
+            }
+            App.Current.Settings.Save(settings);
+            _settings.ReasoningEffortByModel = settings.ReasoningEffortByModel;
+            SaveStatusText.Text = "思考强度已保存";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetStatus($"思考强度未能保存：{ex.Message}", isError: true);
+        }
     }
 
     private void TargetLanguage_Changed(object? sender, EventArgs e)
@@ -211,6 +270,9 @@ public sealed partial class MainPage : Page
         }
 
         TranslateButton.IsEnabled = false;
+        CancelManualTranslationButton.IsEnabled = true;
+        CancelManualTranslationButton.Visibility = Visibility.Visible;
+        ResultTextBox.Text = string.Empty;
         SetStatus("正在请求 Magpie…");
         using var requestCancellation = new CancellationTokenSource();
         _manualTranslationCancellation = requestCancellation;
@@ -223,8 +285,34 @@ public sealed partial class MainPage : Page
         var action = TaskPrompts.GetActionName(taskPrompt);
         try
         {
-            var translation = await App.Current.Translator.TranslateAsync(sourceText, settings, requestCancellation.Token);
+            var builder = new StringBuilder();
+            var lastPreviewAt = 0L;
+            if (settings.EnableStreaming)
+            {
+                await foreach (var chunk in App.Current.Translator
+                                   .StreamTranslateAsync(sourceText, settings, requestCancellation.Token)
+                                   .WithCancellation(requestCancellation.Token))
+                {
+                    builder.Append(chunk);
+                    var now = Environment.TickCount64;
+                    if (now - lastPreviewAt >= 80)
+                    {
+                        ResultTextBox.Text = builder.ToString();
+                        lastPreviewAt = now;
+                    }
+                }
+            }
+            else
+            {
+                builder.Append(await App.Current.Translator.TranslateAsync(sourceText, settings, requestCancellation.Token));
+            }
+
             requestCancellation.Token.ThrowIfCancellationRequested();
+            var translation = builder.ToString().Trim();
+            if (translation.Length == 0)
+            {
+                throw new InvalidOperationException("Magpie 返回了空结果。");
+            }
             ResultTextBox.Text = translation;
             SetStatus($"{action}完成。");
         }
@@ -242,10 +330,17 @@ public sealed partial class MainPage : Page
         finally
         {
             _manualTranslationCancellation = null;
+            CancelManualTranslationButton.Visibility = Visibility.Collapsed;
             if (_isLoaded)
             {
                 TranslateButton.IsEnabled = true;
             }
         }
+    }
+
+    private void CancelManualTranslationButton_Click(object sender, RoutedEventArgs e)
+    {
+        CancelManualTranslationButton.IsEnabled = false;
+        _manualTranslationCancellation?.Cancel();
     }
 }

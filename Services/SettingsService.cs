@@ -46,7 +46,12 @@ public sealed class SettingsService
                     HotkeyModifiers = ReadUInt32(root, "HotkeyModifiers", HotkeyGesture.Default.Modifiers),
                     HotkeyVirtualKey = ReadUInt32(root, "HotkeyVirtualKey", HotkeyGesture.Default.VirtualKey),
                     StartWithWindows = ReadBoolean(root, "StartWithWindows", false),
-                    MinimizeToTrayOnClose = ReadBoolean(root, "MinimizeToTrayOnClose", true)
+                    MinimizeToTrayOnClose = ReadBoolean(root, "MinimizeToTrayOnClose", true),
+                    EnableStreaming = ReadBoolean(root, "EnableStreaming", true),
+                    EnableTranslationCache = ReadBoolean(root, "EnableTranslationCache", true),
+                    EnableTranslationHistory = ReadBoolean(root, "EnableTranslationHistory", true),
+                    HistoryLimit = Math.Clamp(ReadInt32(root, "HistoryLimit", 200), 20, 1000),
+                    ReasoningEffortByModel = ReadReasoningEfforts(root)
                 };
                 var hotkey = HotkeyGesture.FromSettings(settings);
                 settings.HotkeyModifiers = hotkey.Modifiers;
@@ -93,15 +98,20 @@ public sealed class SettingsService
             HotkeyModifiers = hotkey.Modifiers,
             HotkeyVirtualKey = hotkey.VirtualKey,
             StartWithWindows = settings.StartWithWindows,
-            MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose
+            MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
+            EnableStreaming = settings.EnableStreaming,
+            EnableTranslationCache = settings.EnableTranslationCache,
+            EnableTranslationHistory = settings.EnableTranslationHistory,
+            HistoryLimit = Math.Clamp(settings.HistoryLimit, 20, 1000),
+            ReasoningEffortByModel = NormalizeReasoningEfforts(settings.ReasoningEffortByModel)
         };
 
-        var directory = Path.GetDirectoryName(_settingsPath)!;
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(normalized, new JsonSerializerOptions
+        var json = JsonSerializer.Serialize(normalized, new JsonSerializerOptions
         {
             WriteIndented = true
-        }));
+        });
+
+        AtomicFile.WriteAllText(_settingsPath, json);
         Saved?.Invoke(this, EventArgs.Empty);
     }
 
@@ -121,6 +131,64 @@ public sealed class SettingsService
         value.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? value.GetBoolean()
             : fallback;
+
+    private static int ReadInt32(JsonElement root, string propertyName, int fallback) =>
+        root.ValueKind == JsonValueKind.Object && root.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+            ? number
+            : fallback;
+
+    private static Dictionary<string, string> ReadReasoningEfforts(JsonElement root)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("ReasoningEffortByModel", out var values) ||
+            values.ValueKind != JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var property in values.EnumerateObject())
+        {
+            var modelId = property.Name.Trim();
+            var effort = property.Value.ValueKind == JsonValueKind.String
+                ? NormalizeReasoningEffort(property.Value.GetString())
+                : null;
+            if (modelId.Length > 0 && effort is not null)
+            {
+                result[modelId] = effort;
+            }
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, string> NormalizeReasoningEfforts(Dictionary<string, string>? values)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (values is null)
+        {
+            return result;
+        }
+
+        foreach (var (modelId, value) in values)
+        {
+            var normalizedModelId = modelId.Trim();
+            var effort = NormalizeReasoningEffort(value);
+            if (normalizedModelId.Length > 0 && effort is not null)
+            {
+                result[normalizedModelId] = effort;
+            }
+        }
+
+        return result;
+    }
+
+    private static string? NormalizeReasoningEffort(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized is "low" or "medium" or "high" ? normalized : null;
+    }
 
     private static string NormalizeBaseUrl(string? value)
     {

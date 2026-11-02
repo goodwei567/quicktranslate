@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel.Activation;
 
@@ -13,6 +14,7 @@ internal static class Program
     private static bool _openRequested;
 
     internal static bool StartInBackground { get; private set; }
+    internal static bool ElevatedRestart { get; private set; }
 
     [STAThread]
     private static int Main(string[] args)
@@ -21,10 +23,21 @@ internal static class Program
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
             StartInBackground = args.Contains("--background", StringComparer.OrdinalIgnoreCase);
+            ElevatedRestart = args.Contains("--elevated-restart", StringComparer.OrdinalIgnoreCase);
+            WaitForReplacedInstance(args);
             var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
             var instance = AppInstance.FindOrRegisterForKey("QuickTranslate");
             if (!instance.IsCurrent)
             {
+                if (ElevatedRestart)
+                {
+                    MessageBox(IntPtr.Zero,
+                        "管理员模式已启动，但旧的 QuickTranslate 实例没有及时退出。\n" +
+                        "请从托盘退出旧实例后重新启动 QuickTranslate。",
+                        "QuickTranslate", 0x10);
+                    return 0;
+                }
+
                 AllowSetForegroundWindow((uint)instance.ProcessId);
                 RedirectActivation(activation, instance);
                 return 0;
@@ -56,6 +69,49 @@ internal static class Program
             MessageBox(IntPtr.Zero, $"QuickTranslate 无法启动：\n{ex.Message}", "QuickTranslate", 0x10);
             return 1;
         }
+    }
+
+    private static void WaitForReplacedInstance(string[] args)
+    {
+        var processId = ParseIntOption(args, "--replace-pid");
+        if (processId is not int id || id <= 0 || id == Environment.ProcessId)
+        {
+            return;
+        }
+
+        try
+        {
+            using var previous = Process.GetProcessById(id);
+            previous.WaitForExit(10000);
+            // Give the old instance a moment to release the single-instance key.
+            Thread.Sleep(150);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+                                       or System.ComponentModel.Win32Exception)
+        {
+            // The old process has already exited, which is the normal case.
+        }
+    }
+
+    private static int? ParseIntOption(string[] args, string name)
+    {
+        for (var index = 0; index < args.Length; index++)
+        {
+            var argument = args[index];
+            if (argument.Equals(name, StringComparison.OrdinalIgnoreCase) && index + 1 < args.Length)
+            {
+                return int.TryParse(args[index + 1], out var value) ? value : null;
+            }
+
+            var prefix = name + "=";
+            if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(argument[prefix.Length..], out var inlineValue))
+            {
+                return inlineValue;
+            }
+        }
+
+        return null;
     }
 
     internal static bool AttachApp(App app)
