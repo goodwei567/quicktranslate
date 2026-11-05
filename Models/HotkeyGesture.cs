@@ -9,6 +9,8 @@ public sealed record HotkeyGesture(uint Modifiers, uint VirtualKey)
 
     public static HotkeyGesture Default { get; } = new(Control | Shift, 0x54);
 
+    public static HotkeyGesture DefaultAsk { get; } = new(Control | Shift, 0x5A);
+
     public static IReadOnlyList<HotkeyKeyOption> Keys { get; } = Enumerable.Range('A', 26)
         .Select(key => new HotkeyKeyOption((uint)key, ((char)key).ToString()))
         .Concat(Enumerable.Range('0', 10).Select(key => new HotkeyKeyOption((uint)key, ((char)key).ToString())))
@@ -42,6 +44,12 @@ public sealed record HotkeyGesture(uint Modifiers, uint VirtualKey)
     {
         var gesture = new HotkeyGesture(settings.HotkeyModifiers, settings.HotkeyVirtualKey);
         return gesture.ValidationError is null ? gesture : Default;
+    }
+
+    public static HotkeyGesture FromAskSettings(AppSettings settings)
+    {
+        var gesture = new HotkeyGesture(settings.AskHotkeyModifiers, settings.AskHotkeyVirtualKey);
+        return gesture.ValidationError is null ? gesture : DefaultAsk;
     }
 }
 

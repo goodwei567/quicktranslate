@@ -15,6 +15,11 @@
             <SolidColorBrush x:Key="QtChromeBrush" Color="#CCF5F5F7" />
             <SolidColorBrush x:Key="QtSecondaryTextBrush" Color="#6E6E73" />
             <SolidColorBrush x:Key="QtFieldBrush" Color="#99FFFFFF" />
+            <SolidColorBrush x:Key="QtModifierChipBrush" Color="#08000000" />
+            <SolidColorBrush x:Key="QtModifierChipStrokeBrush" Color="#26000000" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedBrush" Color="#330067C0" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedStrokeBrush" Color="#B30067C0" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedTextBrush" Color="#FF0067C0" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="QtCardBrush" Color="#14FFFFFF" />
@@ -26,6 +31,11 @@
             <SolidColorBrush x:Key="QtChromeBrush" Color="#CC1C1C1E" />
             <SolidColorBrush x:Key="QtSecondaryTextBrush" Color="#98989D" />
             <SolidColorBrush x:Key="QtFieldBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="QtModifierChipBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="QtModifierChipStrokeBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedBrush" Color="#664A8FD9" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedStrokeBrush" Color="#CC7DB9F5" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedTextBrush" Color="#FF9FCDFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="QtCardBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -37,6 +47,11 @@
             <SolidColorBrush x:Key="QtChromeBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="QtSecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="QtFieldBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="QtModifierChipBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="QtModifierChipStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedStrokeBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="QtModifierChipSelectedTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -59,6 +74,98 @@
         <Setter Property="Foreground" Value="{ThemeResource QtSecondaryTextBrush}" />
     </Style>
 
+    <Style x:Key="QtSettingsRowLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <Style x:Key="QtSettingsRowDescriptionStyle" TargetType="TextBlock" BasedOn="{StaticResource QtCaptionStyle}">
+        <Setter Property="LineHeight" Value="17" />
+    </Style>
+
+    <Style x:Key="QtSettingsDividerStyle" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+    </Style>
+
+    <Style x:Key="QtSettingsToggleStyle" TargetType="ToggleSwitch" BasedOn="{StaticResource DefaultToggleSwitchStyle}">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="OnContent" Value="开启" />
+        <Setter Property="OffContent" Value="关闭" />
+    </Style>
+
+    <Style x:Key="QtModifierChipStyle" TargetType="ToggleButton">
+        <Setter Property="MinWidth" Value="46" />
+        <Setter Property="MinHeight" Value="27" />
+        <Setter Property="Padding" Value="9,2" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Background" Value="{ThemeResource QtModifierChipBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource QtModifierChipStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="ChipRoot"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter x:Name="ChipContent"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="PointerOver">
+                                <VisualState.Setters>
+                                    <Setter Target="ChipRoot.Opacity" Value="0.86" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Pressed">
+                                <VisualState.Setters>
+                                    <Setter Target="ChipRoot.Opacity" Value="0.7" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Target="ChipRoot.Opacity" Value="0.4" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                        <VisualStateGroup x:Name="CheckStates">
+                            <VisualState x:Name="Unchecked" />
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Target="ChipRoot.Background"
+                                            Value="{ThemeResource QtModifierChipSelectedBrush}" />
+                                    <Setter Target="ChipRoot.BorderBrush"
+                                            Value="{ThemeResource QtModifierChipSelectedStrokeBrush}" />
+                                    <Setter Target="ChipContent.Foreground"
+                                            Value="{ThemeResource QtModifierChipSelectedTextBrush}" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Indeterminate" />
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="QtCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource QtCardBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource QtCardStrokeBrush}" />
@@ -78,6 +185,45 @@
         <Setter Property="MinHeight" Value="32" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style x:Key="QtQuietButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style x:Key="QtQuietIconButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="7" />
+    </Style>
+
+    <Style x:Key="QtBorderlessComboBoxStyle" TargetType="ComboBox"
+           BasedOn="{StaticResource DefaultComboBoxStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Padding" Value="9,3,28,3" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style x:Key="QtComposerTextBoxStyle" TargetType="TextBox"
+           BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="44" />
+        <Setter Property="Padding" Value="9,12" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
     <!-- Segmented switcher used as the app navigation, echoing macOS toolbar segments.

@@ -2,6 +2,29 @@
 
 All notable changes to QuickTranslate are documented here.
 
+## [1.2.0] - 2026-11-05
+
+### Added
+
+- Free-form assistant window opened by its own global shortcut (default `Ctrl+Shift+Z`), with multi-turn context, streaming answers, cancellation, Markdown rendering, and automatic input focus.
+- Independent hotkey settings for selection capture and free-form questions, with duplicate/conflict validation and rollback.
+- `QuickTranslate.exe --ask` starts directly in the free-form assistant window.
+- "改为自由提问" action when the selection cannot be read, so the failed capture can be replaced by a typed question.
+- Model selection and model-list refresh directly inside the free-form assistant.
+
+### Changed
+
+- Redesigned the settings page around compact, clearly grouped rows with more prominent labels and actions.
+- Added an animated selection pill to the main-window navigation.
+- Reworked both popup composers with a unified rounded input surface, equal-height circular send button, soft focus ring, and vertically centered text.
+- Improved foreground activation when reopening the main window from the tray or a second process.
+
+### Fixed
+
+- Cleared stale answer text when retrying a free-form conversation turn.
+- Prevented the popup input focus style from drawing a bright native underline.
+- Preserved the selection hotkey when the optional free-form hotkey cannot be registered.
+
 ## [1.1.0] - 2026-11-02
 
 ### Added

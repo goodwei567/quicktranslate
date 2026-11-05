@@ -14,6 +14,7 @@ internal static class Program
     private static bool _openRequested;
 
     internal static bool StartInBackground { get; private set; }
+    internal static bool AskOnStart { get; private set; }
     internal static bool ElevatedRestart { get; private set; }
 
     [STAThread]
@@ -23,6 +24,7 @@ internal static class Program
         {
             WinRT.ComWrappersSupport.InitializeComWrappers();
             StartInBackground = args.Contains("--background", StringComparer.OrdinalIgnoreCase);
+            AskOnStart = args.Contains("--ask", StringComparer.OrdinalIgnoreCase);
             ElevatedRestart = args.Contains("--elevated-restart", StringComparer.OrdinalIgnoreCase);
             WaitForReplacedInstance(args);
             var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
@@ -141,10 +143,17 @@ internal static class Program
                 _openRequested = true;
             }
         }
-        app?.ShowMainWindow();
+        if (HasArgument(args, "--ask"))
+        {
+            app?.ShowQuickAskWindow();
+        }
+        else
+        {
+            app?.ShowMainWindow();
+        }
     }
 
-    private static bool IsBackgroundActivation(AppActivationArguments args)
+    private static bool HasArgument(AppActivationArguments args, string expected)
     {
         if (args.Data is not ILaunchActivatedEventArgs launch || string.IsNullOrWhiteSpace(launch.Arguments))
         {
@@ -161,7 +170,7 @@ internal static class Program
             for (var index = 0; index < count; index++)
             {
                 var value = Marshal.PtrToStringUni(Marshal.ReadIntPtr(arguments, index * IntPtr.Size));
-                if (string.Equals(value, "--background", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(value, expected, StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -173,6 +182,8 @@ internal static class Program
             LocalFree(arguments);
         }
     }
+
+    private static bool IsBackgroundActivation(AppActivationArguments args) => HasArgument(args, "--background");
 
     private static void RedirectActivation(AppActivationArguments args, AppInstance instance)
     {

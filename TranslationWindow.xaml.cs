@@ -55,6 +55,7 @@ public sealed partial class TranslationWindow : Window
     private string ResultLabel => TaskPrompts.GetResultLabel(_settings.TaskPrompt);
     public bool IsTranslating => _isTranslating;
     public event EventHandler? TranslationStateChanged;
+    public event EventHandler? FreeformAskRequested;
 
     public TranslationWindow(AppSettings settings, MagpieTranslationService translator)
     {
@@ -130,6 +131,7 @@ public sealed partial class TranslationWindow : Window
         TranslationTextBlock.Text = string.Empty;
         TranslationTextBlock.Visibility = Visibility.Collapsed;
         TranslationErrorBar.IsOpen = false;
+        AskFreeformButton.Visibility = Visibility.Collapsed;
         CancelTranslationButton.Visibility = Visibility.Collapsed;
         CancelTranslationButton.IsEnabled = true;
         RetryTranslationButton.Visibility = Visibility.Collapsed;
@@ -408,6 +410,7 @@ public sealed partial class TranslationWindow : Window
         TranslationProgressRing.IsActive = true;
         TranslationTextBlock.Visibility = Visibility.Collapsed;
         TranslationErrorBar.IsOpen = false;
+        AskFreeformButton.Visibility = Visibility.Collapsed;
         RetryTranslationButton.Visibility = Visibility.Collapsed;
         CopyButton.IsEnabled = false;
         _historyEntryId = null;
@@ -427,10 +430,17 @@ public sealed partial class TranslationWindow : Window
 
         OriginalTextBlock.Text = "没有读取到选中文字";
         ShowTranslationError("未能读取选区", error);
+        AskFreeformButton.Visibility = Visibility.Visible;
         CaptureErrorActionButton.Visibility =
             showElevationAction && !ElevationService.IsCurrentProcessElevated()
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+    }
+
+    private void AskFreeformButton_Click(object sender, RoutedEventArgs e)
+    {
+        AskFreeformButton.Visibility = Visibility.Collapsed;
+        FreeformAskRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private async void CaptureErrorActionButton_Click(object sender, RoutedEventArgs e)
@@ -785,6 +795,22 @@ public sealed partial class TranslationWindow : Window
     }
 
     private void QuestionTextBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateComposerState();
+
+    private void QuestionTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (!IsClosed)
+        {
+            ComposerFocusRing.Opacity = 1;
+        }
+    }
+
+    private void QuestionTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!IsClosed)
+        {
+            ComposerFocusRing.Opacity = 0;
+        }
+    }
 
     private async void QuestionTextBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {

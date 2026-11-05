@@ -19,7 +19,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>goodwei567</Authors>
     <Description>Windows selection translator powered by a local Magpie OpenAI-compatible API.</Description>
     <RepositoryUrl>https://github.com/goodwei567/quicktranslate</RepositoryUrl>

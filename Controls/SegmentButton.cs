@@ -16,6 +16,12 @@ public sealed class SegmentButton : Button
         typeof(SegmentButton),
         new PropertyMetadata(false, OnIsSelectedChanged));
 
+    public static readonly DependencyProperty SelectionLayerVisibleProperty = DependencyProperty.Register(
+        nameof(SelectionLayerVisible),
+        typeof(bool),
+        typeof(SegmentButton),
+        new PropertyMetadata(true, OnSelectionLayerVisibleChanged));
+
     private Border? _hoverLayer;
     private Border? _checkLayer;
     private Border? _focusRing;
@@ -76,6 +82,15 @@ public sealed class SegmentButton : Button
         set => SetValue(IsSelectedProperty, value);
     }
 
+    /// <summary>
+    /// Allows a parent to own the selected background, as with the animated navigation pill.
+    /// </summary>
+    public bool SelectionLayerVisible
+    {
+        get => (bool)GetValue(SelectionLayerVisibleProperty);
+        set => SetValue(SelectionLayerVisibleProperty, value);
+    }
+
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -89,6 +104,9 @@ public sealed class SegmentButton : Button
     }
 
     private static void OnIsSelectedChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
+        ((SegmentButton)sender).UpdateLayers();
+
+    private static void OnSelectionLayerVisibleChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
         ((SegmentButton)sender).UpdateLayers();
 
     private static Brush? LookupBrush(string key) =>
@@ -107,7 +125,7 @@ public sealed class SegmentButton : Button
 
         if (_checkLayer is not null)
         {
-            _checkLayer.Background = IsSelected ? _selectedBrush : null;
+            _checkLayer.Background = IsSelected && SelectionLayerVisible ? _selectedBrush : null;
         }
     }
 }

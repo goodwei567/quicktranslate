@@ -67,7 +67,11 @@ public partial class App : Application
         MainWindow.Closed += (_, _) => Exit();
         RepairStartupRegistration();
         var openRequested = Program.AttachApp(this);
-        if (!Program.StartInBackground || !MainWindow.IsTrayAvailable || openRequested)
+        if (Program.AskOnStart)
+        {
+            MainWindow.ShowQuickAskForExternalRequest();
+        }
+        else if (!Program.StartInBackground || !MainWindow.IsTrayAvailable || openRequested)
         {
             MainWindow.ShowMainWindow();
         }
@@ -95,6 +99,8 @@ public partial class App : Application
     }
 
     internal void ShowMainWindow() => _dispatcherQueue.TryEnqueue(() => MainWindow?.ShowMainWindow());
+
+    internal void ShowQuickAskWindow() => _dispatcherQueue.TryEnqueue(() => MainWindow?.ShowQuickAskForExternalRequest());
 
     internal async Task<ElevationRestartResult> RequestElevatedRestartAsync()
     {

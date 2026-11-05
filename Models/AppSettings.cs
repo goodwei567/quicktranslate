@@ -14,6 +14,11 @@ public sealed class AppSettings
 
     public uint HotkeyVirtualKey { get; set; } = 0x54;
 
+    // Free-form assistant: opens an empty composer instead of reading the selection.
+    public uint AskHotkeyModifiers { get; set; } = HotkeyGesture.Control | HotkeyGesture.Shift;
+
+    public uint AskHotkeyVirtualKey { get; set; } = 0x5A;
+
     public bool StartWithWindows { get; set; }
 
     // Opt-in elevation is only used when the user needs to capture text from

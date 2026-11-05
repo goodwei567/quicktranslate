@@ -127,6 +127,9 @@
                                     Visibility="Collapsed" Click="CaptureErrorActionButton_Click" />
                         </InfoBar.ActionButton>
                     </InfoBar>
+                    <HyperlinkButton x:Name="AskFreeformButton" Content="改为自由提问" FontSize="12"
+                                     Padding="0,2,0,8" Visibility="Collapsed" Click="AskFreeformButton_Click"
+                                     ToolTipService.ToolTip="打开不读取选区的自由提问窗口" />
                     <controls:MarkdownTextBlock x:Name="TranslationTextBlock" FontSize="15"
                                                 IsTextSelectionEnabled="True" Visibility="Collapsed"
                                                 UsePipeTables="True" UseTaskLists="True" UseAutoLinks="True"
@@ -174,7 +177,7 @@
         </Grid>
 
         <Border x:Name="ComposerBorder" Grid.Row="3" Padding="16,10,16,12" BorderThickness="0,1,0,0"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" Background="Transparent">
             <StackPanel Spacing="8">
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -186,26 +189,50 @@
                                HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" AutomationProperties.LiveSetting="Polite" />
                 </Grid>
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="QuestionTextBox" PlaceholderText="继续提问，或补充你的要求…"
-                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" MaxHeight="88" Padding="10,8"
-                             IsEnabled="False" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             TextChanged="QuestionTextBox_TextChanged" PreviewKeyDown="QuestionTextBox_PreviewKeyDown"
-                             TextCompositionStarted="QuestionTextBox_TextCompositionStarted"
-                             TextCompositionEnded="QuestionTextBox_TextCompositionEnded" AutomationProperties.Name="向划词助手提问" />
-                    <Button x:Name="CancelTranslationButton" Grid.Column="1" Height="40" MinWidth="54"
-                            VerticalAlignment="Bottom" Content="取消" Visibility="Collapsed"
-                            Click="CancelTranslationButton_Click" ToolTipService.ToolTip="取消当前请求" />
-                    <Button x:Name="AskButton" Grid.Column="2" Width="40" Height="40" VerticalAlignment="Bottom"
-                            Style="{StaticResource AccentButtonStyle}" IsEnabled="False" Click="AskButton_Click"
-                            AutomationProperties.Name="发送问题" ToolTipService.ToolTip="发送问题（Enter）">
-                        <FontIcon Glyph="&#xE724;" FontSize="15" />
-                    </Button>
+                <Grid>
+                    <Border Background="{ThemeResource QtFieldBrush}"
+                            BorderBrush="{ThemeResource QtCardStrokeBrush}" BorderThickness="1"
+                            CornerRadius="12" />
+                    <Grid Padding="5,4,5,4" ColumnSpacing="7">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="QuestionTextBox" PlaceholderText="继续提问，或补充你的要求…"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" MaxHeight="96"
+                                 Style="{StaticResource QtComposerTextBoxStyle}"
+                                 IsEnabled="False" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 GotFocus="QuestionTextBox_GotFocus"
+                                 LostFocus="QuestionTextBox_LostFocus"
+                                 TextChanged="QuestionTextBox_TextChanged"
+                                 PreviewKeyDown="QuestionTextBox_PreviewKeyDown"
+                                 TextCompositionStarted="QuestionTextBox_TextCompositionStarted"
+                                 TextCompositionEnded="QuestionTextBox_TextCompositionEnded"
+                                 AutomationProperties.Name="向划词助手提问">
+                            <TextBox.Resources>
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                            </TextBox.Resources>
+                        </TextBox>
+                        <Button x:Name="CancelTranslationButton" Grid.Column="1" Height="44" MinWidth="50"
+                                VerticalAlignment="Bottom" Style="{StaticResource QtQuietButtonStyle}"
+                                Content="取消" Visibility="Collapsed"
+                                Click="CancelTranslationButton_Click" ToolTipService.ToolTip="取消当前请求" />
+                        <Button x:Name="AskButton" Grid.Column="2" Width="44" Height="44" Padding="0"
+                                VerticalAlignment="Bottom" CornerRadius="22"
+                                Style="{StaticResource AccentButtonStyle}" IsEnabled="False" Click="AskButton_Click"
+                                AutomationProperties.Name="发送问题" ToolTipService.ToolTip="发送问题（Enter）">
+                            <FontIcon Glyph="&#xE724;" FontSize="15" />
+                        </Button>
+                    </Grid>
+                    <Border x:Name="ComposerFocusRing" IsHitTestVisible="False"
+                            Background="Transparent"
+                            BorderBrush="{ThemeResource PopupAccentBrush}" BorderThickness="1"
+                            CornerRadius="12" Opacity="0" />
                 </Grid>
                 <Grid x:Name="KeyboardHintRow">
                     <TextBlock Text="Enter 发送 · Shift+Enter 换行" FontSize="11"

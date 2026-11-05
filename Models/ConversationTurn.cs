@@ -20,6 +20,7 @@ public sealed class ConversationTurn : INotifyPropertyChanged
 
     public void Start()
     {
+        Answer = string.Empty;
         IsPending = true;
         Error = string.Empty;
         NotifyStateChanged();

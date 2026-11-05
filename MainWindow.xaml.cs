@@ -1,12 +1,16 @@
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Hosting;
 using QuickTranslate.Models;
 using QuickTranslate.Services;
 using QuickTranslate.Controls;
 using System.Runtime.InteropServices;
+using System.Numerics;
+using Windows.Foundation;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -22,10 +26,13 @@ public sealed partial class MainWindow : Window
     private readonly TrayIconService _trayIcon;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private TranslationWindow? _translationWindow;
+    private QuickAskWindow? _quickAskWindow;
     private bool _selectionCaptureInProgress;
     private bool _isClosed;
     private bool _exitRequested;
     private bool _isHiddenToTray;
+    private bool _navigationPillReady;
+    private SegmentButton? _selectedNavigationItem;
 
     public bool IsTrayAvailable => _trayIcon.IsAvailable;
 
@@ -42,7 +49,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         _globalHotkey.HotkeyPressed += OnHotkeyPressed;
-        _globalHotkey.Start(HotkeyGesture.FromSettings(App.Current.Settings.Load()));
+        var startupSettings = App.Current.Settings.Load();
+        _globalHotkey.Start(HotkeyGesture.FromSettings(startupSettings), HotkeyGesture.FromAskSettings(startupSettings));
         RootFrame.Navigate(typeof(MainPage));
         _mainPage = (MainPage)RootFrame.Content;
         SelectSegment(WorkbenchNavigationItem);
@@ -55,6 +63,8 @@ public sealed partial class MainWindow : Window
         _trayIcon.Unavailable += OnTrayUnavailable;
         AppWindow.Closing += OnClosing;
         Closed += OnClosed;
+        NavigationTrackGrid.Loaded += OnNavigationTrackLoaded;
+        NavigationTrackGrid.SizeChanged += OnNavigationTrackSizeChanged;
     }
 
     public void ShowMainWindow(bool openSettings = false)
@@ -75,7 +85,37 @@ public sealed partial class MainWindow : Window
         {
             presenter.Restore();
         }
+        ForceForeground();
         Activate();
+    }
+
+    private void ForceForeground()
+    {
+        var window = WindowNative.GetWindowHandle(this);
+        var foreground = GetForegroundWindow();
+        if (foreground == window)
+        {
+            return;
+        }
+
+        // Activation requests arrive from a second process (single-instance redirect) or
+        // from the tray; the foreground lock can otherwise leave the window behind others.
+        var foregroundThread = foreground == IntPtr.Zero ? 0u : GetWindowThreadProcessId(foreground, out _);
+        var currentThread = GetCurrentThreadId();
+        var attached = foregroundThread != 0 && foregroundThread != currentThread &&
+                       AttachThreadInput(currentThread, foregroundThread, true);
+        try
+        {
+            BringWindowToTop(window);
+            _ = SetForegroundWindow(window);
+        }
+        finally
+        {
+            if (attached)
+            {
+                AttachThreadInput(currentThread, foregroundThread, false);
+            }
+        }
     }
 
     private void OnTrayOpenRequested(object? sender, EventArgs e) => ShowMainWindow();
@@ -155,10 +195,68 @@ public sealed partial class MainWindow : Window
 
     private void SelectSegment(SegmentButton selected)
     {
+        _selectedNavigationItem = selected;
         foreach (var segment in new[] { WorkbenchNavigationItem, HistoryNavigationItem, SettingsNavigationItem })
         {
             segment.IsSelected = ReferenceEquals(segment, selected);
         }
+
+        UpdateNavigationPill(selected, animate: _navigationPillReady);
+    }
+
+    private void OnNavigationTrackLoaded(object sender, RoutedEventArgs e)
+    {
+        _navigationPillReady = true;
+        UpdateNavigationPill(_selectedNavigationItem ?? WorkbenchNavigationItem, animate: false);
+    }
+
+    private void OnNavigationTrackSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_navigationPillReady)
+        {
+            UpdateNavigationPill(_selectedNavigationItem ?? WorkbenchNavigationItem, animate: false);
+        }
+    }
+
+    private void UpdateNavigationPill(SegmentButton selected, bool animate)
+    {
+        if (!_navigationPillReady || selected.ActualWidth <= 0 || NavigationTrackGrid.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var position = selected.TransformToVisual(NavigationTrackGrid).TransformPoint(new Point(0, 0));
+        var targetOffset = new Vector3((float)position.X, 0, 0);
+        var targetSize = new Vector2((float)selected.ActualWidth, (float)NavigationTrackGrid.ActualHeight);
+        var visual = ElementCompositionPreview.GetElementVisual(NavigationSelectionPill);
+        NavigationSelectionPill.Width = selected.ActualWidth;
+        NavigationSelectionPill.Height = NavigationTrackGrid.ActualHeight;
+        NavigationSelectionPill.Opacity = 1;
+
+        if (!animate)
+        {
+            visual.StopAnimation("Offset");
+            visual.StopAnimation("Size");
+            visual.Offset = targetOffset;
+            visual.Size = targetSize;
+            return;
+        }
+
+        var compositor = visual.Compositor;
+        var easing = compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.18f, 0.82f),
+            new Vector2(0.22f, 1f));
+        var offsetAnimation = compositor.CreateVector3KeyFrameAnimation();
+        offsetAnimation.InsertKeyFrame(0, visual.Offset);
+        offsetAnimation.InsertKeyFrame(1, targetOffset, easing);
+        offsetAnimation.Duration = TimeSpan.FromMilliseconds(210);
+        visual.StartAnimation("Offset", offsetAnimation);
+
+        var sizeAnimation = compositor.CreateVector2KeyFrameAnimation();
+        sizeAnimation.InsertKeyFrame(0, visual.Size);
+        sizeAnimation.InsertKeyFrame(1, targetSize, easing);
+        sizeAnimation.Duration = TimeSpan.FromMilliseconds(210);
+        visual.StartAnimation("Size", sizeAnimation);
     }
 
     private void NavigateTo(string tag)
@@ -234,6 +332,24 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint attach, uint attachTo, bool value);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
@@ -375,8 +491,48 @@ public sealed partial class MainWindow : Window
 
         var popup = new TranslationWindow(App.Current.Settings.Load(), _translator);
         popup.TranslationStateChanged += OnTranslationStateChanged;
+        popup.FreeformAskRequested += OnFreeformAskRequested;
         _translationWindow = popup;
         return popup;
+    }
+
+    private void OnFreeformAskRequested(object? sender, EventArgs e)
+    {
+        if (sender is TranslationWindow popup)
+        {
+            popup.HideForReuse();
+        }
+        ShowQuickAsk(IntPtr.Zero);
+    }
+
+    private void ShowQuickAsk(IntPtr sourceWindow)
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        var window = _quickAskWindow is { IsClosed: false } existing
+            ? existing
+            : CreateQuickAskWindow();
+        window.PrepareForOpen(App.Current.Settings.Load(), sourceWindow);
+        window.ShowAndFocus();
+    }
+
+    public void ShowQuickAskForExternalRequest() => ShowQuickAsk(IntPtr.Zero);
+
+    private QuickAskWindow CreateQuickAskWindow()
+    {
+        var window = new QuickAskWindow(App.Current.Settings.Load(), _translator);
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_quickAskWindow, window))
+            {
+                _quickAskWindow = null;
+            }
+        };
+        _quickAskWindow = window;
+        return window;
     }
 
     private void OnTranslationStateChanged(object? sender, EventArgs e)
@@ -409,7 +565,17 @@ public sealed partial class MainWindow : Window
 
     private void OnHotkeyPressed(object? sender, HotkeyPressedEventArgs e)
     {
-        _dispatcherQueue.TryEnqueue(() => _ = TranslateSelectedTextAsync(e.ForegroundWindow, e.TriggerKey));
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            if (e.Action == HotkeyAction.QuickAsk)
+            {
+                ShowQuickAsk(e.ForegroundWindow);
+            }
+            else
+            {
+                _ = TranslateSelectedTextAsync(e.ForegroundWindow, e.TriggerKey);
+            }
+        });
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -426,5 +592,6 @@ public sealed partial class MainWindow : Window
         _globalHotkey.HotkeyPressed -= OnHotkeyPressed;
         _globalHotkey.Dispose();
         _translationWindow?.CloseForShutdown();
+        _quickAskWindow?.CloseForShutdown();
     }
 }

@@ -18,7 +18,9 @@ public sealed partial class SettingsPage : Page
         NavigationCacheMode = NavigationCacheMode.Required;
         var settings = App.Current.Settings.Load();
         HotkeyKeyComboBox.ItemsSource = HotkeyGesture.Keys;
+        AskHotkeyKeyComboBox.ItemsSource = HotkeyGesture.Keys;
         ApplyHotkey(HotkeyGesture.FromSettings(settings));
+        ApplyAskHotkey(HotkeyGesture.FromAskSettings(settings));
         TaskPromptBox.Text = TaskPrompts.Normalize(settings.TaskPrompt);
         StartWithWindowsToggle.IsOn = settings.StartWithWindows;
         AdministratorModeToggle.IsOn = settings.UseAdministratorMode;
@@ -33,6 +35,7 @@ public sealed partial class SettingsPage : Page
         _initialized = true;
         SyncPromptPreset();
         UpdateHotkeyPreview();
+        UpdateAskHotkeyPreview();
         Loaded += (_, _) =>
         {
             UpdateActiveHotkey();
@@ -58,9 +61,30 @@ public sealed partial class SettingsPage : Page
         HotkeyKeyComboBox.SelectedItem = HotkeyGesture.Keys.First(key => key.Value == hotkey.VirtualKey);
     }
 
+    private HotkeyGesture SelectedAskHotkey => new(
+        (AskControlCheckBox.IsChecked == true ? HotkeyGesture.Control : 0) |
+        (AskAltCheckBox.IsChecked == true ? HotkeyGesture.Alt : 0) |
+        (AskShiftCheckBox.IsChecked == true ? HotkeyGesture.Shift : 0) |
+        (AskWindowsCheckBox.IsChecked == true ? HotkeyGesture.Windows : 0),
+        AskHotkeyKeyComboBox.SelectedItem is HotkeyKeyOption key ? key.Value : 0);
+
+    private void ApplyAskHotkey(HotkeyGesture hotkey)
+    {
+        AskControlCheckBox.IsChecked = (hotkey.Modifiers & HotkeyGesture.Control) != 0;
+        AskAltCheckBox.IsChecked = (hotkey.Modifiers & HotkeyGesture.Alt) != 0;
+        AskShiftCheckBox.IsChecked = (hotkey.Modifiers & HotkeyGesture.Shift) != 0;
+        AskWindowsCheckBox.IsChecked = (hotkey.Modifiers & HotkeyGesture.Windows) != 0;
+        AskHotkeyKeyComboBox.SelectedItem = HotkeyGesture.Keys.First(key => key.Value == hotkey.VirtualKey);
+    }
+
     private void HotkeyChoice_Changed(object sender, RoutedEventArgs e) => UpdateHotkeyPreview();
 
     private void HotkeyKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateHotkeyPreview();
+
+    private void AskHotkeyChoice_Changed(object sender, RoutedEventArgs e) => UpdateAskHotkeyPreview();
+
+    private void AskHotkeyKeyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateAskHotkeyPreview();
 
     private void UpdateHotkeyPreview()
     {
@@ -68,7 +92,22 @@ public sealed partial class SettingsPage : Page
         {
             var hotkey = SelectedHotkey;
             HotkeyPreviewTextBlock.Text = hotkey.ValidationError ?? $"保存后使用：{hotkey.DisplayText}";
+            UpdateAskHotkeyPreview();
         }
+    }
+
+    private void UpdateAskHotkeyPreview()
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        var hotkey = SelectedAskHotkey;
+        AskHotkeyPreviewTextBlock.Text = hotkey.ValidationError
+            ?? (hotkey == SelectedHotkey
+                ? "不能与划词助手使用同一个快捷键。"
+                : $"保存后使用：{hotkey.DisplayText}");
     }
 
     private void UpdateActiveHotkey()
@@ -76,6 +115,9 @@ public sealed partial class SettingsPage : Page
         var service = App.Current.GlobalHotkey;
         ActiveHotkeyTextBlock.Text = service.IsRegistered
             ? $"当前生效：{service.CurrentHotkey.DisplayText}"
+            : "当前快捷键注册失败，请选择其他组合后保存。";
+        ActiveAskHotkeyTextBlock.Text = service.IsAskRegistered
+            ? $"当前生效：{service.CurrentAskHotkey.DisplayText}"
             : "当前快捷键注册失败，请选择其他组合后保存。";
     }
 
@@ -152,6 +194,8 @@ public sealed partial class SettingsPage : Page
 
     private void ResetHotkey_Click(object sender, RoutedEventArgs e) => ApplyHotkey(HotkeyGesture.Default);
 
+    private void ResetAskHotkey_Click(object sender, RoutedEventArgs e) => ApplyAskHotkey(HotkeyGesture.DefaultAsk);
+
     private void PromptPresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_initialized || _syncingPreset || PromptPresetComboBox.SelectedItem is not ComboBoxItem preset)
@@ -210,6 +254,17 @@ public sealed partial class SettingsPage : Page
             ShowStatus("快捷键无效", error, isError: true);
             return;
         }
+        var askHotkey = SelectedAskHotkey;
+        if (askHotkey.ValidationError is { } askError)
+        {
+            ShowStatus("自由提问快捷键无效", askError, isError: true);
+            return;
+        }
+        if (askHotkey == hotkey)
+        {
+            ShowStatus("快捷键重复", "划词助手和自由提问不能使用同一个组合键。", isError: true);
+            return;
+        }
         var prompt = TaskPromptBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(prompt))
         {
@@ -221,7 +276,9 @@ public sealed partial class SettingsPage : Page
         var startup = App.Current.Startup;
         var previousSettings = App.Current.Settings.Load();
         var previousHotkey = service.CurrentHotkey;
+        var previousAskHotkey = service.CurrentAskHotkey;
         var hotkeyApplied = false;
+        var askHotkeyApplied = false;
         var startupAttempted = false;
         var startWithWindows = StartWithWindowsToggle.IsOn;
         var useAdministratorMode = AdministratorModeToggle.IsOn;
@@ -239,6 +296,8 @@ public sealed partial class SettingsPage : Page
         {
             await service.ChangeAsync(hotkey);
             hotkeyApplied = true;
+            await service.ChangeAskAsync(askHotkey);
+            askHotkeyApplied = true;
             if (!restartRequired)
             {
                 startupAttempted = true;
@@ -249,6 +308,8 @@ public sealed partial class SettingsPage : Page
             var settings = App.Current.Settings.Load();
             settings.HotkeyModifiers = hotkey.Modifiers;
             settings.HotkeyVirtualKey = hotkey.VirtualKey;
+            settings.AskHotkeyModifiers = askHotkey.Modifiers;
+            settings.AskHotkeyVirtualKey = askHotkey.VirtualKey;
             settings.TaskPrompt = prompt;
             settings.StartWithWindows = startWithWindows;
             settings.UseAdministratorMode = useAdministratorMode;
@@ -299,7 +360,7 @@ public sealed partial class SettingsPage : Page
                     ? "管理员模式已关闭，但当前窗口仍是管理员权限；下次启动恢复普通权限"
                     : "普通权限模式";
             ShowStatus("设置已保存",
-                $"快捷键：{hotkey.DisplayText}；{closeBehavior}；{mode}。启动、提示词与输出设置已应用。");
+                $"划词快捷键：{hotkey.DisplayText}；自由提问：{askHotkey.DisplayText}；{closeBehavior}；{mode}。启动、提示词与输出设置已应用。");
         }
         catch (Exception ex)
         {
@@ -324,6 +385,17 @@ public sealed partial class SettingsPage : Page
                 catch (Exception)
                 {
                     rollbackErrors.Add($"当前快捷键为 {service.CurrentHotkey.DisplayText}，请重新保存设置。");
+                }
+            }
+            if (askHotkeyApplied)
+            {
+                try
+                {
+                    await service.ChangeAskAsync(previousAskHotkey);
+                }
+                catch (Exception)
+                {
+                    rollbackErrors.Add($"当前自由提问快捷键为 {service.CurrentAskHotkey.DisplayText}，请重新保存设置。");
                 }
             }
             var recovery = rollbackErrors.Count == 0
@@ -409,7 +481,8 @@ public sealed partial class SettingsPage : Page
         Control[] controls =
         [
             ControlCheckBox, AltCheckBox, ShiftCheckBox, WindowsCheckBox, HotkeyKeyComboBox,
-            ResetHotkeyButton, PromptPresetComboBox, TaskPromptBox, StartWithWindowsToggle,
+            ResetHotkeyButton, AskControlCheckBox, AskAltCheckBox, AskShiftCheckBox, AskWindowsCheckBox,
+            AskHotkeyKeyComboBox, ResetAskHotkeyButton, PromptPresetComboBox, TaskPromptBox, StartWithWindowsToggle,
             AdministratorModeToggle, AutoElevateToggle, RestartElevatedButton,
             MinimizeToTrayToggle, StreamingToggle, TranslationCacheToggle, TranslationHistoryToggle,
             HistoryLimitComboBox, ClearCacheButton, ClearHistoryButton, SaveSettingsButton

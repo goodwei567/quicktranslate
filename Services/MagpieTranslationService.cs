@@ -353,6 +353,130 @@ public sealed class MagpieTranslationService
         }
     }
 
+    public async IAsyncEnumerable<string> StreamChatAsync(
+        IReadOnlyList<ChatMessage> messages,
+        AppSettings settings,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (messages.Count == 0)
+        {
+            throw new InvalidOperationException("请输入问题。");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ModelId))
+        {
+            throw new InvalidOperationException("请先从 Magpie 模型列表中选择一个模型。");
+        }
+
+        await _requestGate.WaitAsync(cancellationToken);
+        var builder = new StringBuilder();
+        try
+        {
+            var modelId = settings.ModelId.Trim();
+            var request = BuildFreeChatRequest(settings, messages, modelId, stream: true);
+            using var response = await OpenChatStreamAsync(settings, request, cancellationToken);
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (mediaType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+                var text = ExtractCompletionText(payload, "回答");
+                builder.Append(text);
+                yield return text;
+            }
+            else
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(stream);
+                while (true)
+                {
+                    var line = await reader.ReadLineAsync(cancellationToken);
+                    if (line is null)
+                    {
+                        break;
+                    }
+
+                    var trimmed = line.TrimStart();
+                    if (trimmed.StartsWith('{'))
+                    {
+                        var text = ExtractCompletionText(trimmed, "回答");
+                        builder.Append(text);
+                        yield return text;
+                        break;
+                    }
+
+                    if (!trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var data = trimmed[5..].Trim();
+                    if (data.Length == 0)
+                    {
+                        continue;
+                    }
+                    if (data == "[DONE]")
+                    {
+                        break;
+                    }
+
+                    var delta = ExtractStreamDelta(data);
+                    if (!string.IsNullOrEmpty(delta))
+                    {
+                        builder.Append(delta);
+                        yield return delta;
+                    }
+                }
+            }
+
+            if (builder.ToString().Trim().Length == 0)
+            {
+                throw new InvalidOperationException("Magpie 返回了空回答。");
+            }
+        }
+        finally
+        {
+            _requestGate.Release();
+        }
+    }
+
+    public async Task<string> ChatAsync(
+        IReadOnlyList<ChatMessage> messages,
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (messages.Count == 0)
+        {
+            throw new InvalidOperationException("请输入问题。");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ModelId))
+        {
+            throw new InvalidOperationException("请先从 Magpie 模型列表中选择一个模型。");
+        }
+
+        await _requestGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            var modelId = settings.ModelId.Trim();
+            var request = BuildFreeChatRequest(settings, messages, modelId, stream: false);
+            var payload = await SendChatRequestAsync(settings, request, cancellationToken);
+            return ExtractCompletionText(payload, "回答");
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException("Magpie 返回的数据格式无法识别。");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException("无法连接 Magpie。请确认 Magpie 正在运行，且本地 API 地址正确。", ex);
+        }
+        finally
+        {
+            _requestGate.Release();
+        }
+    }
+
     private static void AddReasoningEffort(Dictionary<string, object?> request, AppSettings settings, string modelId)
     {
         if (settings.ReasoningEffortByModel is { } efforts &&
@@ -436,6 +560,51 @@ public sealed class MagpieTranslationService
 
         AddReasoningEffort(request, settings, modelId);
         return request;
+    }
+
+    private static Dictionary<string, object?> BuildFreeChatRequest(
+        AppSettings settings,
+        IReadOnlyList<ChatMessage> messages,
+        string modelId,
+        bool stream)
+    {
+        var payload = new List<object>
+        {
+            new
+            {
+                role = "system",
+                content = BuildAssistantInstructions(settings)
+            }
+        };
+        payload.AddRange(messages.Select(message => new
+        {
+            role = message.Role,
+            content = message.Content
+        }));
+
+        var request = new Dictionary<string, object?>
+        {
+            ["model"] = modelId,
+            ["messages"] = payload,
+            ["temperature"] = 0.3
+        };
+        if (stream)
+        {
+            request["stream"] = true;
+        }
+
+        AddReasoningEffort(request, settings, modelId);
+        return request;
+    }
+
+    private static string BuildAssistantInstructions(AppSettings settings)
+    {
+        var language = string.IsNullOrWhiteSpace(settings.TargetLanguage) ? "中文" : settings.TargetLanguage.Trim();
+        return "You are QuickTranslate's free-form assistant, opened by a desktop shortcut. " +
+            "The user typed the question directly and no selected text is attached to this conversation.\n" +
+            $"Reply in {language} unless the user explicitly asks for another language.\n" +
+            "Be accurate, concrete and concise. Use Markdown (lists, tables, fenced code blocks) when it helps. " +
+            "State uncertainty instead of inventing details, and ask a short clarifying question only when it is required.";
     }
 
     private async Task<string> SendChatRequestAsync(

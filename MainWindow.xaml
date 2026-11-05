@@ -26,34 +26,47 @@
             </TitleBar.IconSource>
         </TitleBar>
 
-        <Border Grid.Row="1" Margin="14,0,14,4" Padding="3" CornerRadius="9"
+        <Border x:Name="NavigationTrack" Grid.Row="1" Margin="14,0,14,4" Padding="3" CornerRadius="9"
                 HorizontalAlignment="Left" Background="{ThemeResource QtSegmentTrackBrush}">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-                <controls:SegmentButton x:Name="WorkbenchNavigationItem" Tag="workbench" IsSelected="True"
-                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
-                                        ToolTipService.ToolTip="工作台">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE70F;" FontSize="12" />
-                        <TextBlock Text="工作台" FontSize="12" />
-                    </StackPanel>
-                </controls:SegmentButton>
-                <controls:SegmentButton x:Name="HistoryNavigationItem" Tag="history"
-                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
-                                        ToolTipService.ToolTip="历史">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE81C;" FontSize="12" />
-                        <TextBlock Text="历史" FontSize="12" />
-                    </StackPanel>
-                </controls:SegmentButton>
-                <controls:SegmentButton x:Name="SettingsNavigationItem" Tag="settings"
-                                        Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
-                                        ToolTipService.ToolTip="设置">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE713;" FontSize="12" />
-                        <TextBlock Text="设置" FontSize="12" />
-                    </StackPanel>
-                </controls:SegmentButton>
-            </StackPanel>
+            <Grid x:Name="NavigationTrackGrid">
+                <Border x:Name="NavigationSelectionPill"
+                        Width="0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Stretch"
+                        CornerRadius="7"
+                        Background="{ThemeResource QtSegmentSelectedBrush}"
+                        IsHitTestVisible="False"
+                        Opacity="0" />
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <controls:SegmentButton x:Name="WorkbenchNavigationItem" Tag="workbench" IsSelected="True"
+                                            MinWidth="76" SelectionLayerVisible="False"
+                                            Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                            ToolTipService.ToolTip="工作台">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE70F;" FontSize="12" />
+                            <TextBlock Text="工作台" FontSize="12" />
+                        </StackPanel>
+                    </controls:SegmentButton>
+                    <controls:SegmentButton x:Name="HistoryNavigationItem" Tag="history"
+                                            MinWidth="76" SelectionLayerVisible="False"
+                                            Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                            ToolTipService.ToolTip="历史">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE81C;" FontSize="12" />
+                            <TextBlock Text="历史" FontSize="12" />
+                        </StackPanel>
+                    </controls:SegmentButton>
+                    <controls:SegmentButton x:Name="SettingsNavigationItem" Tag="settings"
+                                            MinWidth="76" SelectionLayerVisible="False"
+                                            Style="{StaticResource QtSegmentButtonStyle}" Click="NavSegment_Click"
+                                            ToolTipService.ToolTip="设置">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE713;" FontSize="12" />
+                            <TextBlock Text="设置" FontSize="12" />
+                        </StackPanel>
+                    </controls:SegmentButton>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <Frame x:Name="RootFrame" Grid.Row="2" CacheSize="3" Background="Transparent" />

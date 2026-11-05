@@ -80,6 +80,8 @@ public sealed partial class MainPage : Page
         _settings.TaskPrompt = saved.TaskPrompt;
         _settings.HotkeyModifiers = saved.HotkeyModifiers;
         _settings.HotkeyVirtualKey = saved.HotkeyVirtualKey;
+        _settings.AskHotkeyModifiers = saved.AskHotkeyModifiers;
+        _settings.AskHotkeyVirtualKey = saved.AskHotkeyVirtualKey;
         _settings.ReasoningEffortByModel = saved.ReasoningEffortByModel;
         SyncReasoningEffort();
         UpdateTaskPresentation();
@@ -88,7 +90,8 @@ public sealed partial class MainPage : Page
     private void UpdateTaskPresentation()
     {
         var action = TaskPrompts.GetActionName(_settings.TaskPrompt);
-        ShortcutHintTextBlock.Text = $"选中文字，按 {HotkeyGesture.FromSettings(_settings).DisplayText}，通过 Magpie {action}并在右上角显示结果。";
+        ShortcutHintTextBlock.Text = $"选中文字按 {HotkeyGesture.FromSettings(_settings).DisplayText} {action}并显示在右上角；" +
+            $"按 {HotkeyGesture.FromAskSettings(_settings).DisplayText} 可直接向 Magpie 提问。";
         ManualTaskTitleTextBlock.Text = $"手动{action}";
         TaskHintTextBlock.Text = "使用设置页面中的提示词；结果留在当前页面，不会额外弹窗。";
         TranslateButton.Content = action;
