@@ -1,9 +1,9 @@
-using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using QuickTranslate.Models;
+using QuickTranslate.Controls;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace QuickTranslate;
@@ -164,9 +164,9 @@ public sealed partial class HistoryPage : Page
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
         });
-        content.Children.Add(new MarkdownTextBlock
+        content.Children.Add(new MathMarkdownTextBlock
         {
-            Text = entry.ResultText,
+            SourceText = entry.ResultText,
             IsTextSelectionEnabled = true,
             UsePipeTables = true,
             UseTaskLists = true,

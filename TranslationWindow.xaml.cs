@@ -128,7 +128,7 @@ public sealed partial class TranslationWindow : Window
         ExpandOriginalButton.Content = "展开";
         ExpandOriginalButton.Visibility = Visibility.Collapsed;
         CharacterCountTextBlock.Text = string.Empty;
-        TranslationTextBlock.Text = string.Empty;
+        TranslationTextBlock.SourceText = string.Empty;
         TranslationTextBlock.Visibility = Visibility.Collapsed;
         TranslationErrorBar.IsOpen = false;
         AskFreeformButton.Visibility = Visibility.Collapsed;
@@ -401,7 +401,7 @@ public sealed partial class TranslationWindow : Window
 
         _original = original;
         _translation = string.Empty;
-        TranslationTextBlock.Text = string.Empty;
+        TranslationTextBlock.SourceText = string.Empty;
         OriginalTextBlock.Text = original;
         CharacterCountTextBlock.Text = $"{original.Length:N0} 字符";
         LoadingTextBlock.Text = $"{ActionName}中…";
@@ -528,7 +528,7 @@ public sealed partial class TranslationWindow : Window
             }
 
             _translation = result;
-            TranslationTextBlock.Text = result;
+            TranslationTextBlock.SourceText = result;
             TranslationTextBlock.Visibility = Visibility.Visible;
             LoadingPanel.Visibility = Visibility.Collapsed;
             TranslationProgressRing.IsActive = false;
@@ -576,7 +576,7 @@ public sealed partial class TranslationWindow : Window
             return;
         }
 
-        TranslationTextBlock.Text = text;
+        TranslationTextBlock.SourceText = text;
         TranslationTextBlock.Visibility = Visibility.Visible;
         LoadingPanel.Visibility = Visibility.Collapsed;
         TranslationProgressRing.IsActive = false;
@@ -812,19 +812,6 @@ public sealed partial class TranslationWindow : Window
         }
     }
 
-    private async void QuestionTextBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key != VirtualKey.Enter ||
-            (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0 ||
-            _isComposing || Environment.TickCount64 - _compositionEndedAt is >= 0 and < 80)
-        {
-            return;
-        }
-
-        e.Handled = true;
-        await AskAsync();
-    }
-
     private void QuestionTextBox_TextCompositionStarted(TextBox sender, TextCompositionStartedEventArgs args) => _isComposing = true;
 
     private void QuestionTextBox_TextCompositionEnded(TextBox sender, TextCompositionEndedEventArgs args)
@@ -833,8 +820,26 @@ public sealed partial class TranslationWindow : Window
         _compositionEndedAt = Environment.TickCount64;
     }
 
-    private void RootGrid_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    private async void RootGrid_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == VirtualKey.Enter &&
+            ReferenceEquals(FocusManager.GetFocusedElement(RootGrid.XamlRoot), QuestionTextBox))
+        {
+            if (_isComposing ||
+                (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0)
+            {
+                return;
+            }
+
+            // Intercept before TextBox inserts a newline, including immediately after an IME commit.
+            e.Handled = true;
+            if (!e.KeyStatus.WasKeyDown && Environment.TickCount64 - _compositionEndedAt >= 80)
+            {
+                await AskAsync();
+            }
+            return;
+        }
+
         if (e.Key == VirtualKey.Escape && !_isComposing)
         {
             e.Handled = true;

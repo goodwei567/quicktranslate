@@ -75,7 +75,7 @@ public sealed partial class MainPage : Page
         var saved = App.Current.Settings.Load();
         if (_settings.TaskPrompt != saved.TaskPrompt)
         {
-            ResultTextBox.Text = string.Empty;
+            ResultTextBox.SourceText = string.Empty;
         }
         _settings.TaskPrompt = saved.TaskPrompt;
         _settings.HotkeyModifiers = saved.HotkeyModifiers;
@@ -185,7 +185,7 @@ public sealed partial class MainPage : Page
 
     public string SourceText => SourceTextBox.Text.Trim();
 
-    public void SetResultText(string text) => ResultTextBox.Text = text;
+    public void SetResultText(string text) => ResultTextBox.SourceText = text;
 
     public void SetStatus(string message, bool isError = false)
     {
@@ -275,7 +275,7 @@ public sealed partial class MainPage : Page
         TranslateButton.IsEnabled = false;
         CancelManualTranslationButton.IsEnabled = true;
         CancelManualTranslationButton.Visibility = Visibility.Visible;
-        ResultTextBox.Text = string.Empty;
+        ResultTextBox.SourceText = string.Empty;
         SetStatus("正在请求 Magpie…");
         using var requestCancellation = new CancellationTokenSource();
         _manualTranslationCancellation = requestCancellation;
@@ -300,7 +300,7 @@ public sealed partial class MainPage : Page
                     var now = Environment.TickCount64;
                     if (now - lastPreviewAt >= 80)
                     {
-                        ResultTextBox.Text = builder.ToString();
+                        ResultTextBox.SourceText = builder.ToString();
                         lastPreviewAt = now;
                     }
                 }
@@ -316,7 +316,7 @@ public sealed partial class MainPage : Page
             {
                 throw new InvalidOperationException("Magpie 返回了空结果。");
             }
-            ResultTextBox.Text = translation;
+            ResultTextBox.SourceText = translation;
             SetStatus($"{action}完成。");
         }
         catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)

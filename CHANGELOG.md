@@ -2,6 +2,17 @@
 
 All notable changes to QuickTranslate are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Local LaTeX formula rendering in quick questions, selection results, follow-up answers, manual results, and history details, without a WebView/browser process.
+- Bounded formula-image caching, background typesetting, theme-aware colors, and literal fallback for unsupported or incomplete formulas.
+
+### Fixed
+
+- Intercepted Enter before the native multiline text box inserts a line break; Shift+Enter still inserts a newline, and IME candidate confirmation remains protected.
+
 ## [1.2.0] - 2026-11-05
 
 ### Added

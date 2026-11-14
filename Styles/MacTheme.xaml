@@ -56,6 +56,10 @@
     </ResourceDictionary.ThemeDictionaries>
 
     <!-- Compact macOS-like type ramp: small titles, quiet captions. -->
+    <Style TargetType="controls:MathMarkdownTextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+    </Style>
+
     <Style x:Key="QtPageTitleStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="SemiBold" />
